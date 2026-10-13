@@ -1,0 +1,216 @@
+/* =========================================================================
+   Capa de marca Koolbrand × Simuloo para Postiz
+   -------------------------------------------------------------------------
+   Va en un archivo propio (/kb-postiz.css?v=<hash>) que el CSS compilado de
+   Postiz importa al principio (ver Dockerfile). Por eso los selectores de
+   variables van reforzados (:root:root): al importarse antes, empatar no basta.
+   El ?v=<hash> evita la caché «immutable» de un año que Next pone a su CSS. No toca su código: solo redefine sus variables de color,
+   la tipografía y sustituye logos. Si una versión nueva de Postiz cambia el
+   nombre de una variable, esa pieza vuelve a su color original y nada se rompe.
+
+   Tokens: los mismos de Simuloo (mirofish/frontend/src/assets/koolbrand.css)
+   y del brandbook de Koolbrand v2.4 — lima #CCE673, tinta #111111, crema.
+   ========================================================================= */
+
+:root {
+  --kb-lime-50: #EFF8D8;
+  --kb-lime-500: #CCE673;
+  --kb-lime-600: #ACC451;
+  --kb-lime-700: #94AA3D;
+  --kb-lime-800: #5C6C16;
+  --kb-ink-950: #111111;
+  --kb-ink-900: #1A1A1A;
+  --kb-ink-850: #202020;
+  --kb-ink-800: #2A2A2A;
+  --kb-line-dark: #2C2C2C;
+  --kb-gray-600: #6E6E6E;
+  --kb-gray-500: #8A8A8A;
+  --kb-gray-300: #CFCFCF;
+  --kb-gray-200: #DDDDDD;
+  --kb-gray-100: #ECECEC;
+  --kb-cream-50: #F7F6F3;
+  --kb-cream-100: #F2F1EF;
+  --kb-font-sans: 'Inter Tight', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --kb-font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+}
+
+/* ---------- Tema claro (la crema de Simuloo, botones en tinta, foco en lima) ---------- */
+:root:root .light,
+html:root .light {
+  --new-bgColor: var(--kb-cream-100);
+  --new-bgColorInner: #FFFFFF;
+  --new-bgLineColor: var(--kb-gray-200);
+  --new-textItemFocused: var(--kb-ink-950);
+  --new-textItemBlur: var(--kb-gray-600);
+  --new-boxFocused: var(--kb-lime-50);
+  --new-textColor: 17 17 17;
+  --new-blockSeparator: var(--kb-gray-100);
+  --new-btn-simple: var(--kb-gray-100);
+  --new-btn-text: var(--kb-ink-950);
+  --new-btn-primary: var(--kb-ink-950);        /* texto blanco encima: 18,9:1 */
+  --new-ai-btn: var(--kb-lime-800);            /* texto blanco encima: 5,8:1 */
+  --new-box-hover: var(--kb-cream-50);
+  --new-table-border: var(--kb-gray-200);
+  --new-table-header: var(--kb-cream-50);
+  --new-table-text: var(--kb-gray-600);
+  --new-table-text-focused: var(--kb-lime-800);
+  --new-big-strips: var(--kb-cream-50);
+  --new-col-color: var(--kb-cream-100);
+  --new-menu-dots: var(--kb-gray-600);
+  --new-menu-hover: var(--kb-ink-950);
+  --popup-color: rgba(17, 17, 17, 0.25);
+
+  --color-primary: var(--kb-cream-100);
+  --color-forth: var(--kb-ink-950);
+  --color-seventh: var(--kb-ink-950);
+  --color-custom4: var(--kb-lime-800);
+  --color-custom7: var(--kb-lime-800);
+  --color-custom28: var(--kb-lime-600);
+  --color-custom29: var(--kb-lime-50);
+  --color-custom30: var(--kb-lime-800);
+  --color-custom41: var(--kb-lime-500);
+  --color-custom45: var(--kb-lime-800);
+  --color-custom50: var(--kb-ink-950);
+  --color-custom51: var(--kb-ink-950);
+}
+
+/* ---------- Tema oscuro (tinta de Koolbrand, acento lima) ---------- */
+:root:root .dark,
+html:root .dark {
+  --new-bgColor: var(--kb-ink-950);
+  --new-bgColorInner: var(--kb-ink-900);
+  --new-bgLineColor: var(--kb-line-dark);
+  --new-textItemFocused: var(--kb-ink-900);
+  --new-textItemBlur: var(--kb-gray-500);
+  --new-blockSeparator: var(--kb-line-dark);
+  --new-btn-simple: var(--kb-ink-800);
+  --new-btn-primary: var(--kb-lime-500);       /* con texto en tinta: 12,5:1 (ver abajo) */
+  --new-ai-btn: var(--kb-lime-800);
+  --new-box-hover: var(--kb-ink-850);
+  --new-table-border: var(--kb-line-dark);
+  --new-table-header: var(--kb-ink-850);
+  --new-table-text-focused: var(--kb-lime-500);
+  --new-small-strips: var(--kb-ink-900);
+  --new-big-strips: var(--kb-ink-850);
+  --new-col-color: var(--kb-ink-800);
+  --popup-color: rgba(0, 0, 0, 0.5);
+
+  --color-primary: var(--kb-ink-950);
+  --color-secondary: var(--kb-ink-950);
+  --color-third: var(--kb-ink-950);
+  --color-forth: var(--kb-lime-500);
+  --color-seventh: var(--kb-lime-500);
+  --color-custom4: var(--kb-lime-700);
+  --color-custom7: var(--kb-lime-700);
+  --color-custom28: var(--kb-lime-600);
+  --color-custom29: #232A0B;
+  --color-custom30: var(--kb-lime-800);
+  --color-custom41: var(--kb-lime-500);
+  --color-custom45: var(--kb-lime-800);
+  --color-custom50: var(--kb-ink-800);
+  --color-custom51: var(--kb-lime-800);
+}
+
+/* ---------- Tipografía: Inter Tight (texto) + JetBrains Mono (datos) ---------- */
+/* body[class] gana a la clase que pone next/font (Plus Jakarta Sans) */
+html body[class],
+html body button,
+html body input,
+html body textarea,
+html body select {
+  font-family: var(--kb-font-sans);
+}
+/* next/font pone su clase (__className_xxxx = Plus Jakarta Sans) también en el
+   contenedor principal de la app, y todo lo de dentro la hereda */
+html body [class*="__className_"] {
+  font-family: var(--kb-font-sans) !important;
+}
+html body code,
+html body pre,
+html body kbd {
+  font-family: var(--kb-font-mono);
+}
+/* Fechas, horas y cifras del calendario en mono, como los datos de Simuloo */
+html body .font-\[500\].text-\[14px\]:has(> time),
+html body time {
+  font-family: var(--kb-font-mono);
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Tema oscuro: el botón principal es lima con texto en TINTA, como en la marca
+   (Postiz le pone text-white; sobre lima blanco no se lee: 1,4:1) */
+html .dark .bg-forth.text-white,
+html .dark .bg-forth.text-white *,
+html .dark .bg-seventh.text-white,
+html .dark .bg-seventh.text-white *,
+html .dark .bg-btnPrimary,
+html .dark .bg-btnPrimary * {
+  color: var(--kb-ink-950) !important;
+}
+
+/* Foco visible en lima, como en Simuloo (WCAG 2.4.7) */
+html body :focus-visible {
+  outline: 2px solid var(--kb-lime-600);
+  outline-offset: 2px;
+}
+
+/* Selección de texto en lima */
+html body ::selection {
+  background: var(--kb-lime-500);
+  color: var(--kb-ink-950);
+}
+
+/* ---------- Logos (los SVG de Postiz van incrustados en el código) ---------- */
+/* Barra lateral: la «P» de Postiz → la «k» de Koolbrand */
+svg[viewBox="0 0 60 60"][width="60"].mt-\[8px\] {
+  background: url('/kb-k.svg') center / 78% no-repeat;
+}
+svg[viewBox="0 0 60 60"][width="60"].mt-\[8px\] > * {
+  display: none;
+}
+
+/* Login: el texto «postiz» → logotipo Koolbrand en negativo (la pantalla es oscura) */
+svg[viewBox="0 0 366 167"] {
+  width: 144px !important;
+  height: 30px !important;
+  background: url('/kb-koolbrand-negativo.svg') left center / contain no-repeat;
+}
+svg[viewBox="0 0 366 167"] > * {
+  display: none;
+}
+
+/* Login: fondo espacial morado de Postiz → tinta con un halo lima discreto */
+.lbox .bg-loginBg {
+  background-image: radial-gradient(60% 60% at 15% 20%, rgba(204, 230, 115, 0.14), transparent 70%) !important;
+}
+.lbox .bg-loginBox {
+  background-image: none !important;
+  background-color: var(--kb-ink-900);
+  border: 1px solid var(--kb-line-dark);
+  border-radius: 16px;
+}
+
+/* ---------- Morados escritos a mano en el código de Postiz (v2.10.1) ---------- */
+/* Spinner de carga (components/layout/loading.tsx: color="#612bd3") */
+[style*="fill: rgb(97, 43, 211)"],
+[style*="fill:#612bd3" i],
+[style*="fill: #612bd3" i],
+[style*="fill: rgb(97, 42, 213)"],
+[style*="fill: #612ad5" i] {
+  fill: var(--kb-lime-600) !important;
+}
+/* Borde al arrastrar una publicación en el calendario */
+.border-\[\#612BD3\] {
+  border-color: var(--kb-lime-600) !important;
+}
+/* Barras de desplazamiento de firmas y autopost */
+.scrollbar-thumb-\[\#612AD5\] {
+  --scrollbar-thumb: var(--kb-lime-700) !important;
+}
+/* Enlaces y icono del selector de fecha / TikTok */
+.text-\[\#B69DEC\] {
+  color: var(--kb-lime-700) !important;
+}
+[fill="#B69DEC" i] {
+  fill: var(--kb-lime-600);
+}
