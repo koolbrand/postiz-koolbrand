@@ -1,0 +1,91 @@
+services:
+  postiz:
+    image: 'ghcr.io/gitroomhq/postiz-app:v2.10.1'
+    mem_limit: 2g
+    environment:
+      - SERVICE_URL_POSTIZ_5000
+      - 'MAIN_URL=${SERVICE_URL_POSTIZ}'
+      - 'FRONTEND_URL=${SERVICE_URL_POSTIZ}'
+      - 'NEXT_PUBLIC_BACKEND_URL=${SERVICE_URL_POSTIZ}/api'
+      - 'JWT_SECRET=${SERVICE_PASSWORD_JWTSECRET}'
+      - 'DATABASE_URL=postgresql://postgres:${SERVICE_PASSWORD_POSTGRESQL}@postgres:5432/${POSTGRESQL_DATABASE:-postiz-db}'
+      - 'REDIS_URL=redis://default:${SERVICE_PASSWORD_REDIS}@redis:6379'
+      - 'BACKEND_INTERNAL_URL=http://localhost:3000'
+      - 'CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID}'
+      - 'CLOUDFLARE_ACCESS_KEY=${CLOUDFLARE_ACCESS_KEY}'
+      - 'CLOUDFLARE_SECRET_ACCESS_KEY=${CLOUDFLARE_SECRET_ACCESS_KEY}'
+      - 'CLOUDFLARE_BUCKETNAME=${CLOUDFLARE_BUCKETNAME}'
+      - 'CLOUDFLARE_BUCKET_URL=${CLOUDFLARE_BUCKET_URL}'
+      - 'CLOUDFLARE_REGION=${CLOUDFLARE_REGION}'
+      - 'STORAGE_PROVIDER=${STORAGE_PROVIDER:-local}'
+      - 'UPLOAD_DIRECTORY=${UPLOAD_DIRECTORY:-/uploads}'
+      - 'NEXT_PUBLIC_UPLOAD_DIRECTORY=${NEXT_PUBLIC_UPLOAD_DIRECTORY:-/uploads}'
+      - 'NEXT_PUBLIC_UPLOAD_STATIC_DIRECTORY=${NEXT_PUBLIC_UPLOAD_STATIC_DIRECTORY}'
+      - 'RESEND_API_KEY=${RESEND_API_KEY}'
+      - 'EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS}'
+      - 'EMAIL_FROM_NAME=${EMAIL_FROM_NAME}'
+      - 'EMAIL_PROVIDER=${EMAIL_PROVIDER}'
+      - 'FACEBOOK_APP_ID=${FACEBOOK_APP_ID}'
+      - 'FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET}'
+      - 'YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}'
+      - 'YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}'
+      - 'NEXT_PUBLIC_DISCORD_SUPPORT=${NEXT_PUBLIC_DISCORD_SUPPORT}'
+      - 'NEXT_PUBLIC_POLOTNO=${NEXT_PUBLIC_POLOTNO}'
+      - IS_GENERAL=true
+      - DISABLE_REGISTRATION=true
+      - 'NX_ADD_PLUGINS=${NX_ADD_PLUGINS:-false}'
+      - 'NOT_SECURED=${NOT_SECURED:-false}'
+      - 'FEE_AMOUNT=${FEE_AMOUNT:-0.05}'
+      - 'STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}'
+      - 'STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}'
+      - 'STRIPE_SIGNING_KEY=${STRIPE_SIGNING_KEY}'
+      - 'STRIPE_SIGNING_KEY_CONNECT=${STRIPE_SIGNING_KEY_CONNECT}'
+    volumes:
+      - 'postiz_config:/config/'
+      - 'postiz_uploads:/uploads/'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'wget -qO- http://127.0.0.1:5000/'
+      interval: 5s
+      timeout: 20s
+      retries: 10
+  postgres:
+    image: 'postgres:14.5'
+    mem_limit: 512m
+    volumes:
+      - 'postiz_postgresql_data:/var/lib/postgresql/data'
+    environment:
+      - POSTGRES_USER=postgres
+      - 'POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRESQL}'
+      - 'POSTGRES_DB=${POSTGRESQL_DATABASE:-postiz-db}'
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB:-postiz-db}'
+      interval: 5s
+      timeout: 20s
+      retries: 10
+  redis:
+    image: 'redis:7.2'
+    mem_limit: 256m
+    environment:
+      - 'REDIS_PASSWORD=${SERVICE_PASSWORD_REDIS}'
+    command: 'redis-server --requirepass ${SERVICE_PASSWORD_REDIS}'
+    volumes:
+      - 'postiz_redis_data:/data'
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - '-a'
+        - '${SERVICE_PASSWORD_REDIS}'
+        - ping
+      interval: 5s
+      timeout: 10s
+      retries: 20

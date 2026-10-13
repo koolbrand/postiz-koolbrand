@@ -6,7 +6,7 @@ FROM ghcr.io/gitroomhq/postiz-app:${POSTIZ_VERSION}
 
 COPY marca/ /kb-marca/
 
-# 1) CSS: cada CSS compilado de Next importa al principio Google Fonts y nuestra capa
+# 1) CSS: cada CSS compilado de Next (static/css hasta v2.10, static/chunks con Turbopack desde v2.2x) importa al principio Google Fonts y nuestra capa
 #    (/kb-postiz.css?v=<hash>) y se RENOMBRA a <nombre>-kb<hash>.css, actualizando
 #    los manifiestos de Next: así ningún navegador se queda con una copia vieja
 #    (Next sirve su CSS con caché «immutable» de un año).
@@ -25,7 +25,7 @@ RUN set -eu; \
       cp /kb-marca/favicon.ico "$d/favicon.ico"; cp /kb-marca/favicon.png "$d/favicon.png"; cp /kb-marca/favicon.png "$d/postiz-fav.png"; \
       [ -f "$d/no-channels-colors.svg" ] && sed -i 's/#DACBFB/#CCE673/Ig; s/#E7DDFE/#E3F1B9/Ig' "$d/no-channels-colors.svg"; \
     done; \
-    CSS=$(find / -path /proc -prune -o -path '*/.next/static/css/*.css' -print 2>/dev/null); \
+    CSS=$(find / -path /proc -prune -o \( -path '*/.next/static/css/*.css' -o -path '*/.next/static/chunks/*.css' \) -print 2>/dev/null | grep -v node_modules || true); \
     [ -n "$CSS" ] || { echo 'No encuentro el CSS compilado de Postiz'; exit 1; }; \
     for f in $CSS; do \
       viejo=$(basename "$f"); nuevo="${viejo%.css}-kb$V.css"; \
@@ -38,8 +38,10 @@ RUN set -eu; \
       if find "$raiz" -path "$raiz/cache" -prune -o -type f \( -name '*.json' -o -name '*.js' -o -name '*.html' \) -print | xargs grep -lF "$viejo" 2>/dev/null | grep -q .; then \
         echo "Quedan referencias a $viejo"; exit 1; fi; \
     done; \
-    grep -qF "$V" /app/apps/frontend/.next/app-build-manifest.json || { echo 'El manifiesto no apunta al CSS nuevo'; exit 1; }; \
-    echo "Capa de marca v=$V aplicada a $(echo "$CSS" | wc -l) CSS"
+    find /app/apps/frontend/.next -path '*/cache' -prune -o -type f \( -name '*.json' -o -name '*.js' \) -print | xargs grep -lF "kb$V" 2>/dev/null | grep -q . || { echo 'Ningún manifiesto apunta al CSS nuevo'; exit 1; }; \
+    echo "Capa de marca v=$V aplicada a $(echo "$CSS" | wc -l) CSS"; \
+    for n in $(find / -path /proc -prune -o -type d -name .next -print 2>/dev/null | grep -v node_modules); do sh /kb-marca/recolorear.sh "$n"; done; \
+    for p in $PUB; do sh /kb-marca/recolorear.sh "$(dirname "$p")"; done
 
 LABEL org.opencontainers.image.source="https://github.com/koolbrand/postiz-koolbrand" \
       org.opencontainers.image.description="Postiz con la marca Koolbrand × Simuloo (capa sobre la imagen oficial)" \

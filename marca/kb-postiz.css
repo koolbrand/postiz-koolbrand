@@ -214,3 +214,31 @@ svg[viewBox="0 0 366 167"] > * {
 [fill="#B69DEC" i] {
   fill: var(--kb-lime-600);
 }
+
+/* ---------- Login rediseñado de Postiz v2.2x ---------- */
+/* Logotipo «postiz» (svg 101×33, incrustado) → logotipo Koolbrand en negativo */
+svg[viewBox="0 0 101 33"] {
+  width: 144px !important;
+  height: 30px !important;
+  background: url('/kb-koolbrand-negativo.svg') left center / contain no-repeat;
+}
+svg[viewBox="0 0 101 33"] > * {
+  display: none;
+}
+/* Panel derecho de testimonios («Over 20,000+ Entrepreneurs use Postiz») →
+   panel de marca: tinta, halo lima y la «k» grande */
+.bg-\[\#0E0E0E\] > .text-\[36px\].pt-\[88px\] {
+  position: relative;
+  border-radius: 12px;
+  background:
+    url('/kb-k.svg') center / 220px no-repeat,
+    radial-gradient(55% 55% at 50% 45%, rgba(204, 230, 115, 0.16), transparent 70%),
+    var(--kb-ink-900);
+  border: 1px solid var(--kb-line-dark);
+}
+.bg-\[\#0E0E0E\] > .text-\[36px\].pt-\[88px\] > * {
+  display: none !important;
+}
+.bg-\[\#0E0E0E\] {
+  background-color: var(--kb-ink-950) !important;
+}
