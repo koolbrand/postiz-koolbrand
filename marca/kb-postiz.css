@@ -242,3 +242,8 @@ svg[viewBox="0 0 101 33"] > * {
 .bg-\[\#0E0E0E\] {
   background-color: var(--kb-ink-950) !important;
 }
+
+/* Indicador de la opción activa en Ajustes (svg 5×52 con degradado morado incrustado) */
+.group\/profile svg[viewBox="0 0 5 52"] path {
+  fill: var(--kb-lime-500) !important;
+}
