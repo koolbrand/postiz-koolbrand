@@ -43,7 +43,8 @@ RUN set -eu; \
     for n in $(find / -path /proc -prune -o -type d -name .next -print 2>/dev/null | grep -v node_modules); do sh /kb-marca/recolorear.sh "$n"; done; \
     for p in $PUB; do sh /kb-marca/recolorear.sh "$(dirname "$p")"; done; \
     sh /kb-marca/linkedin-perfil.sh; \
-    sh /kb-marca/idioma-es.sh
+    sh /kb-marca/idioma-es.sh; \
+    sh /kb-marca/aprobacion.sh
 
 LABEL org.opencontainers.image.source="https://github.com/koolbrand/postiz-koolbrand" \
       org.opencontainers.image.description="Postiz con la marca Koolbrand × Simuloo (capa sobre la imagen oficial)" \
