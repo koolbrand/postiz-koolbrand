@@ -41,7 +41,8 @@ RUN set -eu; \
     find /app/apps/frontend/.next -path '*/cache' -prune -o -type f \( -name '*.json' -o -name '*.js' \) -print | xargs grep -lF "kb$V" 2>/dev/null | grep -q . || { echo 'Ningún manifiesto apunta al CSS nuevo'; exit 1; }; \
     echo "Capa de marca v=$V aplicada a $(echo "$CSS" | wc -l) CSS"; \
     for n in $(find / -path /proc -prune -o -type d -name .next -print 2>/dev/null | grep -v node_modules); do sh /kb-marca/recolorear.sh "$n"; done; \
-    for p in $PUB; do sh /kb-marca/recolorear.sh "$(dirname "$p")"; done
+    for p in $PUB; do sh /kb-marca/recolorear.sh "$(dirname "$p")"; done; \
+    sh /kb-marca/linkedin-perfil.sh
 
 LABEL org.opencontainers.image.source="https://github.com/koolbrand/postiz-koolbrand" \
       org.opencontainers.image.description="Postiz con la marca Koolbrand × Simuloo (capa sobre la imagen oficial)" \
