@@ -247,3 +247,43 @@ svg[viewBox="0 0 101 33"] > * {
 .group\/profile svg[viewBox="0 0 5 52"] path {
   fill: var(--kb-lime-500) !important;
 }
+
+/* ---------- «Agregar canal»: solo las redes que funcionan (14-oct-2026) ---------- */
+/* Sin app configurada (pulsarlas lleva a la red con client_id vacío o da error), o fuera de lo que
+   usa una agencia. Al dar de alta una red (skill conectar-red), BORRAR su línea de aquí. */
+.grid > div:has(> div > img[src="/icons/platforms/x.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/reddit.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/instagram-standalone.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/tiktok-business.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/pinterest.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/dribbble.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/discord.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/slack.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/kick.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/twitch.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/vk.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/whop.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/mewe.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/tumblr.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/wrapcast.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/lemmy.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/nostr.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/devto.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/hashnode.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/listmonk.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/moltbook.png"]),
+.grid > div:has(> div > img[src="/icons/platforms/skool.png"]) {
+  display: none !important;
+}
+
+/* Diálogo «¿Seguro?»: Sí y No salían iguales (dos primarios lima). El segundo (No / cancelar)
+   pasa a secundario, con los tokens de la marca. */
+.flex.gap-\[12px\].mt-\[16px\] > button.bg-forth:last-child:not(:first-child) {
+  background: transparent !important;
+  color: var(--new-btn-text, var(--kb-ink-950)) !important;
+  border: 1px solid var(--new-bgLineColor, var(--kb-gray-300));
+}
+html .dark .flex.gap-\[12px\].mt-\[16px\] > button.bg-forth:last-child:not(:first-child),
+html .dark .flex.gap-\[12px\].mt-\[16px\] > button.bg-forth:last-child:not(:first-child) * {
+  color: #FFFFFF !important;
+}
