@@ -16,7 +16,7 @@ for par in $MAPA; do
   de=${par%%:*}; a=${par##*:}
   r=$(printf '%d' 0x$(echo $de | cut -c1-2)); g=$(printf '%d' 0x$(echo $de | cut -c3-4)); b=$(printf '%d' 0x$(echo $de | cut -c5-6))
   ra=$(printf '%d' 0x$(echo $a | cut -c1-2)); ga=$(printf '%d' 0x$(echo $a | cut -c3-4)); ba=$(printf '%d' 0x$(echo $a | cut -c5-6))
-  expr="$expr;s/#$de/#$a/Ig;s/rgb($r $g $b/rgb($ra $ga $ba/g;s/rgb($r,$g,$b)/rgb($ra,$ga,$ba)/g;s/rgb($r, $g, $b)/rgb($ra, $ga, $ba)/g;s/rgba($r,$g,$b,/rgba($ra,$ga,$ba,/g"
+  expr="$expr;s/#$de/#$a/Ig;s/rgb($r $g $b/rgb($ra $ga $ba/g;s/rgb($r,$g,$b)/rgb($ra,$ga,$ba)/g;s/rgb($r, $g, $b)/rgb($ra, $ga, $ba)/g;s/rgba($r,$g,$b,/rgba($ra,$ga,$ba,/g;s/rgba($r, $g, $b,/rgba($ra, $ga, $ba,/g"
 done
 expr=${expr#;}
 n=0
