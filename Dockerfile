@@ -44,8 +44,7 @@ RUN set -eu; \
     for p in $PUB; do sh /kb-marca/recolorear.sh "$(dirname "$p")"; done; \
     sh /kb-marca/linkedin-perfil.sh; \
     sh /kb-marca/idioma-es.sh; \
-    sh /kb-marca/aprobacion.sh; \
-    node /kb-marca/permisos-app.js
+    sh /kb-marca/aprobacion.sh
 
 LABEL org.opencontainers.image.source="https://github.com/koolbrand/postiz-koolbrand" \
       org.opencontainers.image.description="Postiz con la marca Koolbrand × Simuloo (capa sobre la imagen oficial)" \
