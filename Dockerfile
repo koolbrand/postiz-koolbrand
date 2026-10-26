@@ -1,7 +1,7 @@
 # Capa de marca Koolbrand × Simuloo sobre la imagen OFICIAL de Postiz.
 # No es un fork: parte de la imagen publicada y solo añade CSS y logos.
 # La versión de Postiz la fija el fichero POSTIZ_VERSION (ver .github/workflows).
-ARG POSTIZ_VERSION=v2.10.1
+ARG POSTIZ_VERSION=v2.25.3
 FROM ghcr.io/gitroomhq/postiz-app:${POSTIZ_VERSION}
 
 COPY marca/ /kb-marca/
