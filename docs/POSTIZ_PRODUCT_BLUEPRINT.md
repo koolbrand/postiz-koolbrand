@@ -66,6 +66,7 @@ Operar Postiz en el Mac mini como plataforma de publicación de Koolbrand para v
 ### 4. Experiencia Metricool propia
 
 - Ya existen el calendario/publicador de Postiz y capacidades de La Puerta para métricas por canal, mejores horas (Instagram/Facebook), comentarios (lectura), competidores de Instagram e informes para cliente.
+- Post for Me documenta métricas TikTok en `GET /v1/social-account-feeds/{social_account_id}?expand=metrics`; la autorización debe pedir `feeds`, y el adaptador ya lo solicita junto con `posts`. Los valores son acumulados de vida por publicación, no series históricas. El adaptador `tiktok-postforme` todavía rechaza la analítica; para una capa propia tipo Metricool habrá que importar el feed con paginación y empezar a guardar snapshots fechados desde la primera captura — sin reconstruir retrospectivamente datos diarios que la API no entrega. Distinguir cobertura TikTok estándar de `tiktok_business`, que expone métricas ampliadas con los permisos de ese proveedor. No etiquetar métricas acumuladas como resultados diarios.
 - Auditar los informes existentes y su cobertura por red antes de construir otra capa. Añadir comparativas por cliente, periodo, red y publicación, e informes recurrentes solo donde la API entregue datos fiables.
 - Verificar disponibilidad de inbox completo, aprobaciones, analítica histórica y respuestas por proveedor; no asumir paridad con Metricool.
 - Separar los datos de cada cliente en consultas y exportaciones. Validar la separación antes de habilitar acceso externo.
@@ -113,6 +114,8 @@ La UX descrita por TikTok para Content Posting API/Direct Post se aplica al adap
 - Post for Me, retorno OAuth, parámetros de callback y webhooks: https://www.postforme.dev/resources/handling-account-connection-redirects-and-webhooks
 - Post for Me, resultado individual por cuenta: https://www.postforme.dev/resources/getting-post-results
 - Post for Me, cuentas TikTok vs. TikTok Business: https://www.postforme.dev/resources/tiktok-vs-tiktok-business-api
+- Post for Me, analytics del feed y permiso `feeds`: https://www.postforme.dev/resources/getting-post-analytics
+- Post for Me, paginación del feed: https://www.postforme.dev/resources/pagination-account-feeds
 - TikTok API for Business, Accounts API y permisos de publicación para socios: https://business-api.tiktok.com/portal/docs/accounts-api-overview/v1.3
 - TikTok for Business, socios Content & Community Management y Accounts API: https://ads.tiktok.com/business/en-US/blog/introducing-content-marketing-partners
 - Post for Me, precios por volumen: https://www.postforme.dev/faq
