@@ -22,7 +22,7 @@ Este repositorio solo construye la imagen con la capa de marca; no contiene la a
 1. `vigilar-version.yml` abre una issue cada vez que Postiz publica versión.
 2. Se revisan las notas y se actualizan en la misma PR `POSTIZ_VERSION`, `POSTIZ_UPSTREAM_COMMIT` y el patch.
 3. `construir.yml` descarga la fuente oficial fijada, aplica el patch y compila frontend y backend.
-4. La PR construye sin publicar la imagen; al fusionarse, publica `ghcr.io/koolbrand/postiz-koolbrand:<versión>-kb` para amd64 y arm64.
+4. La PR y `workflow_dispatch` construyen sin publicar. Solo un `push` a `main` publica `ghcr.io/koolbrand/postiz-koolbrand:<versión>-kb` y `latest-kb` para amd64 y arm64.
 5. Antes de actualizar producción: backup verificable, prueba aislada, rollback y despliegue autorizado en el Mac mini.
 
 El patch cambia la organización y el provisionamiento; cada actualización upstream requiere volver a aplicarlo y compilar. La instancia sigue compartiendo runtime y base de datos entre organizaciones, aunque los canales se separan por `organizationId`.
