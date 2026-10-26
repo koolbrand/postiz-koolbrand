@@ -1,25 +1,31 @@
-# Construye la imagen con la marca sobre la versión de Postiz fijada en POSTIZ_VERSION
-# y la publica en ghcr.io/koolbrand/postiz-koolbrand:<versión>-kb y :latest-kb, para amd64 y arm64
-# (el Mac mini es arm64).
-name: Construir imagen con marca
+# Compila Postiz desde su fuente oficial fijada y añade el patch de Koolbrand.
+name: Construir Postiz Koolbrand desde fuente
 on:
+  pull_request:
+    paths: [POSTIZ_VERSION, POSTIZ_UPSTREAM_COMMIT, Dockerfile, 'patches/**', 'marca/**', 'oauth-gateway/**', '.github/workflows/construir.yml']
   push:
     branches: [main]
-    paths: [POSTIZ_VERSION, Dockerfile, 'marca/**', '.github/workflows/construir.yml']
+    paths: [POSTIZ_VERSION, POSTIZ_UPSTREAM_COMMIT, Dockerfile, 'patches/**', 'marca/**', 'oauth-gateway/**', '.github/workflows/construir.yml']
   workflow_dispatch:
 permissions:
   contents: read
   packages: write
+concurrency:
+  group: postiz-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   construir:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - id: v
-        run: echo "version=$(tr -d '[:space:]' < POSTIZ_VERSION)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(tr -d '[:space:]' < POSTIZ_VERSION)" >> "$GITHUB_OUTPUT"
+          echo "upstream_commit=$(tr -d '[:space:]' < POSTIZ_UPSTREAM_COMMIT)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -27,9 +33,14 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
           platforms: linux/amd64,linux/arm64
-          build-args: POSTIZ_VERSION=${{ steps.v.outputs.version }}
+          build-args: |
+            POSTIZ_VERSION=${{ steps.v.outputs.version }}
+            POSTIZ_UPSTREAM_COMMIT=${{ steps.v.outputs.upstream_commit }}
+            NEXT_PUBLIC_VERSION=${{ steps.v.outputs.version }}
+          cache-from: type=gha,scope=postiz-source-build
+          cache-to: type=gha,mode=max,scope=postiz-source-build
           tags: |
             ghcr.io/koolbrand/postiz-koolbrand:${{ steps.v.outputs.version }}-kb
             ghcr.io/koolbrand/postiz-koolbrand:latest-kb

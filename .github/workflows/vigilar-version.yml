@@ -26,4 +26,4 @@ jobs:
           gh issue list --state open --search "$titulo in:title" --json number --jq 'length' | grep -q '^0$' || exit 0
           gh issue create --title "$titulo" --body "Notas: https://github.com/gitroomhq/postiz-app/releases/tag/$ultima
 
-          Para actualizar: cambiar POSTIZ_VERSION a $ultima, dejar que se construya la imagen, probarla y cambiar la etiqueta en Coolify (servicio iqv4lcuko5gzq8cmooyjakic). Revisar antes si la versión pide servicios nuevos o cambia los nombres de las variables de color (colors.scss)."
+          La producción actual corre en el Mac mini (Colima), no en Coolify. Revisar si la versión pide servicios nuevos o cambia los nombres de las variables de color (colors.scss) y si los parches funcionales de permisos (marca/aprobacion.sh) siguen siendo válidos. Cambiar POSTIZ_VERSION y construir la imagen solo después de revisar las notas. No desplegar: el procedimiento de backup, validación en staging y rollback del Mac mini está pendiente de documentar."

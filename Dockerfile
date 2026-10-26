@@ -1,10 +1,41 @@
-# Capa de marca Koolbrand × Simuloo sobre la imagen OFICIAL de Postiz.
-# No es un fork: parte de la imagen publicada y solo añade CSS y logos.
-# La versión de Postiz la fija el fichero POSTIZ_VERSION (ver .github/workflows).
-ARG POSTIZ_VERSION=v2.10.1
-FROM ghcr.io/gitroomhq/postiz-app:${POSTIZ_VERSION}
+# Build reproducible desde el código fuente oficial de Postiz más el patch Koolbrand.
+# POSTIZ_VERSION y POSTIZ_UPSTREAM_COMMIT fijan exactamente la fuente que se compila.
+ARG POSTIZ_VERSION=v2.25.3
+ARG POSTIZ_UPSTREAM_COMMIT
+ARG NEXT_PUBLIC_VERSION=${POSTIZ_VERSION}
+FROM node:22.23.4-bookworm-slim
+ARG POSTIZ_VERSION
+ARG POSTIZ_UPSTREAM_COMMIT
+ARG NEXT_PUBLIC_VERSION
+ENV NEXT_PUBLIC_VERSION=${NEXT_PUBLIC_VERSION}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git g++ make python3-pip bash nginx \
+    && rm -rf /var/lib/apt/lists/*
+RUN npm --no-update-notifier --no-fund --global install pnpm@10.6.1 pm2
+
+WORKDIR /app
+RUN test -n "${POSTIZ_UPSTREAM_COMMIT}" \
+    && git clone --depth 1 --branch "${POSTIZ_VERSION}" https://github.com/gitroomhq/postiz-app.git /app \
+    && git checkout --detach "${POSTIZ_UPSTREAM_COMMIT}" \
+    && test "$(git rev-parse HEAD)" = "${POSTIZ_UPSTREAM_COMMIT}" \
+    && git config --global url."https://github.com/".insteadOf "git@github.com:" \
+    && git submodule update --init --depth 1
+
+# Descarga el store desde el lockfile upstream, cacheable aunque cambie el patch Koolbrand.
+RUN pnpm fetch
+
+COPY patches/postiz-v2.25.3.patch /tmp/postiz-koolbrand.patch
+RUN git apply --unidiff-zero --check /tmp/postiz-koolbrand.patch \
+    && git apply --unidiff-zero /tmp/postiz-koolbrand.patch
 
 COPY marca/ /kb-marca/
+RUN cp /app/var/docker/nginx.conf /etc/nginx/nginx.conf \
+    && sed -i 's/^user[[:space:]]\+www;/user www-data;/' /etc/nginx/nginx.conf
+RUN sh /kb-marca/idioma-es.sh
+# El postinstall genera Prisma Client; ejecutarlo después del patch para incluir su schema.
+RUN pnpm install --prefer-offline
+RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
 
 # 1) CSS: cada CSS compilado de Next (static/css hasta v2.10, static/chunks con Turbopack desde v2.2x) importa al principio Google Fonts y nuestra capa
 #    (/kb-postiz.css?v=<hash>) y se RENOMBRA a <nombre>-kb<hash>.css, actualizando
@@ -42,10 +73,10 @@ RUN set -eu; \
     echo "Capa de marca v=$V aplicada a $(echo "$CSS" | wc -l) CSS"; \
     for n in $(find / -path /proc -prune -o -type d -name .next -print 2>/dev/null | grep -v node_modules); do sh /kb-marca/recolorear.sh "$n"; done; \
     for p in $PUB; do sh /kb-marca/recolorear.sh "$(dirname "$p")"; done; \
-    sh /kb-marca/linkedin-perfil.sh; \
-    sh /kb-marca/idioma-es.sh; \
-    sh /kb-marca/aprobacion.sh
+    sh /kb-marca/linkedin-perfil.sh
 
 LABEL org.opencontainers.image.source="https://github.com/koolbrand/postiz-koolbrand" \
-      org.opencontainers.image.description="Postiz con la marca Koolbrand × Simuloo (capa sobre la imagen oficial)" \
+      org.opencontainers.image.description="Postiz source build con aislamiento multi-cliente y marca Koolbrand" \
       org.opencontainers.image.licenses="AGPL-3.0"
+
+CMD ["sh", "-c", "nginx && pnpm run pm2"]

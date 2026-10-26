@@ -1,0 +1,1138 @@
+diff --git a/apps/backend/src/api/routes/enterprise.controller.ts b/apps/backend/src/api/routes/enterprise.controller.ts
+index fef89ef..728b4b9 100644
+--- a/apps/backend/src/api/routes/enterprise.controller.ts
++++ b/apps/backend/src/api/routes/enterprise.controller.ts
+@@ -1,1 +1,2 @@
+-import { Body, Controller, Param, Post, Res } from '@nestjs/common';
++import { Body, Controller, Headers, HttpException, Param, Post, Res } from '@nestjs/common';
++import { createHmac, timingSafeEqual } from 'crypto';
+@@ -19,0 +21,71 @@ export class EnterpriseController {
++  @Post('/managed-tenants')
++  async createManagedTenant(
++    @Body() body: { externalId?: string; name?: string },
++    @Headers('x-kb-timestamp') timestamp: string,
++    @Headers('x-kb-nonce') nonce: string,
++    @Headers('x-kb-signature') signature: string
++  ) {
++    const secret = process.env.KOOLBRAND_TENANT_PROVISIONER_SECRET;
++    const operatorUserId = process.env.KOOLBRAND_POSTIZ_OPERATOR_USER_ID;
++    if (!secret || secret.length < 32 || !operatorUserId) {
++      throw new HttpException('Tenant provisioner is not configured', 503);
++    }
++    if (
++      typeof body?.externalId !== 'string' ||
++      !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(body.externalId) ||
++      typeof body?.name !== 'string' ||
++      body.name.trim().length < 3 ||
++      body.name.trim().length > 128 ||
++      !timestamp || !/^\d{10,13}$/.test(timestamp) ||
++      !nonce || !/^[a-f0-9]{32,64}$/.test(nonce) ||
++      !signature || !/^[a-f0-9]{64}$/.test(signature)
++    ) {
++      throw new HttpException('Invalid tenant provisioning request', 400);
++    }
++    const sentAt = Number(timestamp);
++    const sentAtMs = timestamp.length === 10 ? sentAt * 1000 : sentAt;
++    if (!Number.isSafeInteger(sentAtMs) || Math.abs(Date.now() - sentAtMs) > 60_000) {
++      throw new HttpException('Expired tenant provisioning request', 401);
++    }
++
++    const tenantName = body.name.trim();
++    const canonical = JSON.stringify([
++      'POST',
++      '/api/enterprise/managed-tenants',
++      timestamp,
++      nonce,
++      body.externalId,
++      tenantName,
++    ]);
++    const expected = createHmac('sha256', secret).update(canonical).digest();
++    const provided = Buffer.from(signature, 'hex');
++    if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
++      throw new HttpException('Invalid tenant provisioner signature', 401);
++    }
++
++    const claimed = await ioRedis.set(
++      `kb:tenant-provisioning:nonce:${nonce}`,
++      '1',
++      'EX',
++      120,
++      'NX'
++    );
++    if (claimed !== 'OK') {
++      throw new HttpException('Replayed tenant provisioning request', 409);
++    }
++
++    const tenant = await this._organizationService.createManagedOrganization(
++      body.externalId,
++      tenantName,
++      operatorUserId
++    );
++    // This is a server-to-server endpoint. The key is consumed by the Mac mini
++    // provisioner and must never be called from or exposed to a browser.
++    return {
++      externalId: body.externalId,
++      organizationId: tenant.id,
++      name: tenant.name,
++      apiKey: tenant.apiKey,
++    };
++  }
++
+diff --git a/apps/backend/src/api/routes/integrations.controller.ts b/apps/backend/src/api/routes/integrations.controller.ts
+index bfd1d8a..c293273 100644
+--- a/apps/backend/src/api/routes/integrations.controller.ts
++++ b/apps/backend/src/api/routes/integrations.controller.ts
+@@ -233,0 +234,6 @@ export class IntegrationsController {
++    if (
++      integration === 'tiktok-postforme' &&
++      this._integrationManager.isHiddenProvider(integration)
++    ) {
++      throw new Error('Post for Me TikTok adapter is disabled or unconfigured');
++    }
+@@ -259,1 +265,1 @@ export class IntegrationsController {
+-        await integrationProvider.generateAuthUrl(getExternalUrl);
++        await integrationProvider.generateAuthUrl(getExternalUrl, org.id);
+@@ -419,6 +425,14 @@ export class IntegrationsController {
+   @Delete('/')
+   async deleteChannel(
+     @GetOrgFromRequest() org: Organization,
+     @Body('id') id: string
+   ) {
++    const channel = await this._integrationService.getIntegrationById(org.id, id);
++    if (!channel) {
++      throw new Error('Invalid integration');
++    }
++    const provider = this._integrationManager.getSocialIntegration(
++      channel.providerIdentifier
++    );
++    await provider.disconnectAccount?.(channel);
+     const isTherePosts = await this._integrationService.getPostsForChannel(
+diff --git a/apps/backend/src/api/routes/no.auth.integrations.controller.ts b/apps/backend/src/api/routes/no.auth.integrations.controller.ts
+index 0c0df0c..01b6669 100644
+--- a/apps/backend/src/api/routes/no.auth.integrations.controller.ts
++++ b/apps/backend/src/api/routes/no.auth.integrations.controller.ts
+@@ -56,0 +57,9 @@ export class NoAuthIntegrationsController {
++    if (
++      integration === 'tiktok-postforme' &&
++      this._integrationManager.isHiddenProvider(integration)
++    ) {
++      throw new HttpException(
++        'Post for Me TikTok adapter is disabled or unconfigured',
++        404
++      );
++    }
+@@ -60,0 +70,9 @@ export class NoAuthIntegrationsController {
++    // Some providers (currently the optional Post for Me Quickstart adapter)
++    // return to a static callback without OAuth state. Resolve that callback
++    // through a server-side account lookup and a one-use tenant transaction.
++    const callbackResolution =
++      integrationProvider.resolveOAuthCallback && body.projectId
++        ? await integrationProvider.resolveOAuthCallback(body as any)
++        : undefined;
++    const callbackState = callbackResolution?.state ?? body.state;
++    const callbackCode = callbackResolution?.code ?? body.code;
+@@ -63,1 +81,1 @@ export class NoAuthIntegrationsController {
+-      : await ioRedis.get(`login:${body.state}`);
++      : await ioRedis.get(`login:${callbackState}`);
+@@ -72,1 +90,1 @@ export class NoAuthIntegrationsController {
+-    const organization = await ioRedis.get(`organization:${body.state}`);
++    const organization = await ioRedis.get(`organization:${callbackState}`);
+@@ -80,1 +98,1 @@ export class NoAuthIntegrationsController {
+-      await ioRedis.del(`login:${body.state}`);
++      await ioRedis.del(`login:${callbackState}`);
+@@ -84,1 +102,1 @@ export class NoAuthIntegrationsController {
+-      ? await ioRedis.get(`external:${body.state}`)
++      ? await ioRedis.get(`external:${callbackState}`)
+@@ -88,1 +106,1 @@ export class NoAuthIntegrationsController {
+-      await ioRedis.del(`external:${body.state}`);
++      await ioRedis.del(`external:${callbackState}`);
+@@ -91,1 +109,1 @@ export class NoAuthIntegrationsController {
+-    const refresh = await ioRedis.get(`refresh:${body.state}`);
++    const refresh = await ioRedis.get(`refresh:${callbackState}`);
+@@ -93,1 +111,1 @@ export class NoAuthIntegrationsController {
+-      await ioRedis.del(`refresh:${body.state}`);
++      await ioRedis.del(`refresh:${callbackState}`);
+@@ -96,1 +114,1 @@ export class NoAuthIntegrationsController {
+-    const onboarding = await ioRedis.get(`onboarding:${body.state}`);
++    const onboarding = await ioRedis.get(`onboarding:${callbackState}`);
+@@ -98,1 +116,1 @@ export class NoAuthIntegrationsController {
+-      await ioRedis.del(`onboarding:${body.state}`);
++      await ioRedis.del(`onboarding:${callbackState}`);
+@@ -116,1 +134,1 @@ export class NoAuthIntegrationsController {
+-            code: body.code,
++            code: callbackCode,
+diff --git a/apps/backend/src/api/routes/users.controller.ts b/apps/backend/src/api/routes/users.controller.ts
+index fccade5..d6c549b 100644
+--- a/apps/backend/src/api/routes/users.controller.ts
++++ b/apps/backend/src/api/routes/users.controller.ts
+@@ -98,1 +98,3 @@ export class UsersController {
+-      totalChannels: !process.env.STRIPE_PUBLISHABLE_KEY
++      totalChannels: organization?.managedExternalId
++        ? 30
++        : !process.env.STRIPE_PUBLISHABLE_KEY
+@@ -102,0 +105,3 @@ export class UsersController {
++        organization?.managedExternalId
++          ? 'PRO'
++          :
+@@ -119,1 +124,1 @@ export class UsersController {
+-        organization?.users[0]?.role === 'SUPERADMIN' ||
++        !organization?.managedExternalId &&
+@@ -121,1 +126,3 @@ export class UsersController {
+-        organization?.users[0]?.role === 'ADMIN'
++        (organization?.users[0]?.role === 'SUPERADMIN' ||
++        // @ts-ignore
++        organization?.users[0]?.role === 'ADMIN')
+@@ -247,0 +255,3 @@ export class UsersController {
++    if (organization?.managedExternalId) {
++      throw new HttpException('API keys for managed tenants are maintained by Koolbrand', 400);
++    }
+diff --git a/apps/backend/src/services/auth/auth.service.ts b/apps/backend/src/services/auth/auth.service.ts
+index 89706de..8ecf9ec 100644
+--- a/apps/backend/src/services/auth/auth.service.ts
++++ b/apps/backend/src/services/auth/auth.service.ts
+@@ -23,4 +23,1 @@ export class AuthService {
+-    if (
+-      process.env.DISABLE_REGISTRATION !== 'true' ||
+-      provider === Provider.GENERIC
+-    ) {
++    if (process.env.DISABLE_REGISTRATION !== 'true') {
+@@ -29,1 +26,3 @@ export class AuthService {
+-    return (await this._organizationService.getCount()) === 0;
++    // Existing provider identities are returned before this check.
++    // Closed registration must not let OAuth create a new organization.
++    return false;
+diff --git a/apps/frontend/src/components/launches/continue.integration.tsx b/apps/frontend/src/components/launches/continue.integration.tsx
+index 8386cb4..223be7a 100644
+--- a/apps/frontend/src/components/launches/continue.integration.tsx
++++ b/apps/frontend/src/components/launches/continue.integration.tsx
+@@ -82,0 +83,16 @@ export const ContinueIntegration: FC<{
++    // Post for Me Quickstart uses a static callback with no OAuth state. Pass
++    // only the callback payload; the backend resolves tenant ownership by
++    // looking up the account with its server-side API key.
++    if (provider === 'tiktok-postforme' && searchParams.projectId) {
++      return {
++        state: '',
++        code: '',
++        provider: searchParams.provider || '',
++        projectId: searchParams.projectId || '',
++        isSuccess: searchParams.isSuccess || '',
++        accountIds: searchParams.accountIds || '',
++        failedAccountIds: searchParams.failedAccountIds || '',
++        error: searchParams.error || '',
++      };
++    }
++
+diff --git a/apps/frontend/src/components/new-launch/providers/show.all.providers.tsx b/apps/frontend/src/components/new-launch/providers/show.all.providers.tsx
+index 0492df9..fa3a570 100644
+--- a/apps/frontend/src/components/new-launch/providers/show.all.providers.tsx
++++ b/apps/frontend/src/components/new-launch/providers/show.all.providers.tsx
+@@ -92,0 +93,4 @@ export const Providers = [
++  {
++    identifier: 'tiktok-postforme',
++    component: TiktokProvider,
++  },
+diff --git a/apps/frontend/src/components/new-launch/providers/tiktok/tiktok.provider.tsx b/apps/frontend/src/components/new-launch/providers/tiktok/tiktok.provider.tsx
+index 99bb9af..ebc7510 100644
+--- a/apps/frontend/src/components/new-launch/providers/tiktok/tiktok.provider.tsx
++++ b/apps/frontend/src/components/new-launch/providers/tiktok/tiktok.provider.tsx
+@@ -4,0 +5,1 @@ import {
++  useEffect,
+@@ -26,1 +27,1 @@ const TikTokSettings: FC<{
+-  const { watch, register } = useSettings();
++  const { watch, register, setValue } = useSettings();
+@@ -32,0 +34,7 @@ const TikTokSettings: FC<{
++  const isPostForMe = integration?.identifier === 'tiktok-postforme';
++
++  useEffect(() => {
++    if (isPostForMe) {
++      setValue('content_posting_method', 'DIRECT_POST', { shouldDirty: false });
++    }
++  }, [isPostForMe, setValue]);
+@@ -152,4 +160,5 @@ const TikTokSettings: FC<{
+-      <div className="text-[14px] mt-[10px] mb-[18px] text-balance">
+-        {t(
+-          'choose_upload_without_posting_description',
+-          `Choose upload without posting if you want to review and edit your content within TikTok's app before publishing.
++      {!isPostForMe && (
++        <div className="text-[14px] mt-[10px] mb-[18px] text-balance">
++          {t(
++            'choose_upload_without_posting_description',
++            `Choose upload without posting if you want to review and edit your content within TikTok's app before publishing.
+@@ -157,15 +166,24 @@ const TikTokSettings: FC<{
+-        )}
+-      </div>
+-      <Select
+-        label={t('label_content_posting_method', 'Content posting method')}
+-        {...register('content_posting_method', {
+-          value: 'DIRECT_POST',
+-        })}
+-      >
+-        <option value="">{t('select', 'Select')}</option>
+-        {contentPostingMethod.map((item) => (
+-          <option key={item.value} value={item.value}>
+-            {item.label}
+-          </option>
+-        ))}
+-      </Select>
++          )}
++        </div>
++      )}
++      {isPostForMe ? (
++        <input
++          type="hidden"
++          value="DIRECT_POST"
++          {...register('content_posting_method')}
++        />
++      ) : (
++        <Select
++          label={t('label_content_posting_method', 'Content posting method')}
++          {...register('content_posting_method', {
++            value: 'DIRECT_POST',
++          })}
++        >
++          <option value="">{t('select', 'Select')}</option>
++          {contentPostingMethod.map((item) => (
++            <option key={item.value} value={item.value}>
++              {item.label}
++            </option>
++          ))}
++        </Select>
++      )}
+diff --git a/docs/postforme-quickstart-tiktok.md b/docs/postforme-quickstart-tiktok.md
+new file mode 100644
+index 0000000..dfa2055
+--- /dev/null
++++ b/docs/postforme-quickstart-tiktok.md
+@@ -0,0 +1,70 @@
++# Post for Me Quickstart: TikTok vertical slice
++
++**Status: prototype, disabled by default. Not a complete or production-ready
++Post for Me integration.** This adds a separate `tiktok-postforme` identifier
++with an optional TikTok connection and asynchronous publish path while reusing
++Postiz's existing TikTok composer and settings. It does not alter existing
++native TikTok channels. No real OAuth, account, spend, vendor contact, or
++deployment was performed.
++
++## Configuration and security boundary
++
++The adapter is selected only when all of the following are set in the backend
++environment:
++
++- `POSTFORME_TIKTOK_ENABLED=true`
++- `POSTFORME_API_KEY` (server-side only)
++- `POSTFORME_PROJECT_ID`
++
++Without all three, new TikTok connections use the existing native provider
++flow. A Post for Me callback received while disabled is rejected. Never expose
++the API key or Post for Me account tokens to the browser. The Postiz
++integration stores only an opaque `postforme:<account-id>` reference.
++
++Post for Me's callback has no OAuth state. On OAuth start, the backend sends
++the authenticated `Organization.id` as `external_id` and stores one short-lived
++pending transaction per organization in Redis. On callback, the backend looks
++up the account using its API key, checks project/provider/success and the
++vendor-returned account's TikTok platform, connected status and `external_id`,
++then consumes that organization's pending transaction once. It accepts exactly
++one account per channel; cancellation, zero accounts, multiple accounts,
++expired/replayed callbacks, or tenant mismatch fail closed. A second concurrent
++connection for the same organization is rejected while one is pending.
++
++Before publishing or polling, the backend re-fetches the account and verifies
++its ID, TikTok platform, connected status and tenant `external_id`. Each
++Postiz post/channel pair gets a deterministic, channel-scoped `external_id`.
++Before creating and while polling, the adapter queries
++`/v1/social-posts?external_id=` to recover an accepted request after an
++ambiguous timeout or malformed 2xx response. If it cannot yet find the post,
++the workflow stays pending rather than immediately submitting again. The
++pending workflow queries `/v1/social-post-results` and only completes when the
++single expected account result reports `success: true` with an HTTPS URL and
++platform post ID; explicit failure becomes a provider error and missing or
++incomplete results stay pending.
++
++Post for Me documents `external_id` as a linking identifier, not a request
++deduplication guarantee. The lookup reduces duplicate risk but cannot fully
++prevent duplicates if list results are eventually consistent or concurrent
++create requests race; resolve those cases before production.
++
++## Unsupported and unverified behavior
++
++- Analytics, media reconciliation and refresh/reconnect are not implemented.
++  Analytics/reconciliation calls fail closed for these opaque account
++  references. Deleting a Postiz channel first
++  calls Post for Me's account disconnect endpoint, revoking active tokens but
++  retaining the provider-side account history. If remote revocation fails,
++  Postiz keeps the channel so an operator can retry safely.
++  Keep the feature flag and API key configured until all attached channels
++  have been disconnected; disabling the adapter first blocks deletion.
++- The adapter accepts one TikTok account per Postiz channel. It does not
++  partially connect or publish across the callback's multiple-account result.
++- TikTok settings are mapped from Postiz's existing TikTok settings. Confirm
++  the exact Post for Me Quickstart TikTok field/value contract before enabling
++  the feature for a real organization.
++- A Post for Me project, API key, dashboard callback configuration and
++  non-production end-to-end verification are still required. Tests/build were
++  not run. Keep the feature flag off until the code receives review and
++  the callback/publish/results flow is verified against a non-production
++  project.
+diff --git a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
+index f70f71c..468a2a7 100644
+--- a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
++++ b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
+@@ -16,0 +17,69 @@ export class OrganizationRepository {
++  async createManagedOrganization(
++    externalId: string,
++    name: string,
++    operatorUserId: string
++  ) {
++    const operator = await this._user.model.user.findUnique({
++      where: { id: operatorUserId },
++      select: { id: true, isSuperAdmin: true, deletedAt: true },
++    });
++    if (!operator?.isSuperAdmin || operator.deletedAt) {
++      throw new Error('Configured Postiz tenant operator is not an active superadmin');
++    }
++
++    const existing = await this._organization.model.organization.findUnique({
++      where: { managedExternalId: externalId },
++      select: { id: true, name: true, apiKey: true },
++    });
++    if (existing) {
++      if (existing.name !== name) {
++        throw new Error('Managed external ID already belongs to a different organization name');
++      }
++      return existing;
++    }
++
++    try {
++      return await this._organization.model.organization.create({
++        select: { id: true, name: true, apiKey: true },
++        data: {
++          name,
++          managedExternalId: externalId,
++          apiKey: AuthService.fixedEncryption(makeSecureId(32)),
++          allowTrial: false,
++          isTrailing: false,
++          subscription: {
++            create: {
++              subscriptionTier: SubscriptionTier.PRO,
++              totalChannels: 30,
++              isLifetime: true,
++              period: 'YEARLY',
++              provider: 'self-hosted',
++            },
++          },
++          users: {
++            create: {
++              role: Role.ADMIN,
++              user: { connect: { id: operator.id } },
++            },
++          },
++        },
++      });
++    } catch (error: any) {
++      // A retry after a lost response, or concurrent requests with the same
++      // external ID, must return the one organization already created.
++      if (error?.code === 'P2002') {
++        const created = await this._organization.model.organization.findUnique({
++          where: { managedExternalId: externalId },
++          select: { id: true, name: true, apiKey: true },
++        });
++        if (created) {
++          if (created.name !== name) {
++            throw new Error('Managed external ID already belongs to a different organization name');
++          }
++          return created;
++        }
++      }
++      throw error;
++    }
++  }
++
+diff --git a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
+index b14f5db..62919fb 100644
+--- a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
++++ b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
+@@ -32,0 +33,12 @@ export class OrganizationService {
++  createManagedOrganization(
++    externalId: string,
++    name: string,
++    operatorUserId: string
++  ) {
++    return this._organizationRepository.createManagedOrganization(
++      externalId,
++      name,
++      operatorUserId
++    );
++  }
++
+diff --git a/libraries/nestjs-libraries/src/database/prisma/schema.prisma b/libraries/nestjs-libraries/src/database/prisma/schema.prisma
+index 2fd85ec..ba9f536 100644
+--- a/libraries/nestjs-libraries/src/database/prisma/schema.prisma
++++ b/libraries/nestjs-libraries/src/database/prisma/schema.prisma
+@@ -13,0 +14,1 @@ model Organization {
++  managedExternalId   String?              @unique
+diff --git a/libraries/nestjs-libraries/src/dtos/integrations/connect.integration.dto.ts b/libraries/nestjs-libraries/src/dtos/integrations/connect.integration.dto.ts
+index a74bfb5..af73a0f 100644
+--- a/libraries/nestjs-libraries/src/dtos/integrations/connect.integration.dto.ts
++++ b/libraries/nestjs-libraries/src/dtos/integrations/connect.integration.dto.ts
+@@ -18,0 +19,26 @@ export class ConnectIntegrationDto {
++
++  // Post for Me Quickstart's static callback has no OAuth state or code; its
++  // account IDs are resolved and validated by the backend.
++  @IsString()
++  @IsOptional()
++  provider?: string;
++
++  @IsString()
++  @IsOptional()
++  projectId?: string;
++
++  @IsString()
++  @IsOptional()
++  isSuccess?: string;
++
++  @IsString()
++  @IsOptional()
++  accountIds?: string;
++
++  @IsString()
++  @IsOptional()
++  failedAccountIds?: string;
++
++  @IsString()
++  @IsOptional()
++  error?: string;
+diff --git a/libraries/nestjs-libraries/src/integrations/integration.manager.ts b/libraries/nestjs-libraries/src/integrations/integration.manager.ts
+index ac26c81..cef309d 100644
+--- a/libraries/nestjs-libraries/src/integrations/integration.manager.ts
++++ b/libraries/nestjs-libraries/src/integrations/integration.manager.ts
+@@ -14,1 +14,1 @@ import { YoutubeProvider } from '@gitroom/nestjs-libraries/integrations/social/y
+-import { TiktokProvider } from '@gitroom/nestjs-libraries/integrations/social/tiktok.provider';
++import { PostForMeTiktokProvider, TiktokProvider } from '@gitroom/nestjs-libraries/integrations/social/tiktok.provider';
+@@ -53,0 +54,1 @@ export const socialIntegrationList: Array<SocialAbstract & SocialProvider> = [
++  new PostForMeTiktokProvider(),
+@@ -88,0 +90,10 @@ export class IntegrationManager {
++    if (
++      identifier === 'tiktok-postforme' &&
++      !(
++        process.env.POSTFORME_TIKTOK_ENABLED === 'true' &&
++        process.env.POSTFORME_API_KEY &&
++        process.env.POSTFORME_PROJECT_ID
++      )
++    ) {
++      return true;
++    }
+diff --git a/libraries/nestjs-libraries/src/integrations/social/social.integrations.interface.ts b/libraries/nestjs-libraries/src/integrations/social/social.integrations.interface.ts
+index 261b84e..ce7d750 100644
+--- a/libraries/nestjs-libraries/src/integrations/social/social.integrations.interface.ts
++++ b/libraries/nestjs-libraries/src/integrations/social/social.integrations.interface.ts
+@@ -24,1 +24,2 @@ export interface IAuthenticator {
+-    clientInformation?: ClientInformation
++    clientInformation?: ClientInformation,
++    organizationId?: string
+@@ -25,0 +27,8 @@ export interface IAuthenticator {
++  /** Resolve providers whose callback cannot carry OAuth state. Implementations
++   * must validate callback data server-side and return a one-use state only. */
++  resolveOAuthCallback?(callback: Record<string, any>): Promise<{
++    state: string;
++    code: string;
++  }>;
++  /** Revoke provider-side access before Postiz removes the channel record. */
++  disconnectAccount?(integration: Integration): Promise<void>;
+diff --git a/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts b/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
+index 960663b..cba74cd 100644
+--- a/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
++++ b/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
+@@ -24,0 +25,1 @@ import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorato
++import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+@@ -53,0 +55,147 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++  private postForMeEnabled() {
++    return (
++      this.identifier === 'tiktok-postforme' &&
++      process.env.POSTFORME_TIKTOK_ENABLED === 'true' &&
++      !!process.env.POSTFORME_API_KEY &&
++      !!process.env.POSTFORME_PROJECT_ID
++    );
++  }
++
++  private async postForMeRequest(path: string, init: RequestInit = {}) {
++    if (!this.postForMeEnabled()) {
++      throw new Error('Post for Me TikTok adapter is disabled or unconfigured');
++    }
++    const response = await fetch(`https://api.postforme.dev${path}`, {
++      ...init,
++      headers: {
++        Authorization: `Bearer ${process.env.POSTFORME_API_KEY}`,
++        'Content-Type': 'application/json',
++        ...(init.headers || {}),
++      },
++    });
++    const body = await response.json().catch(() => ({}));
++    if (!response.ok) {
++      const error: any = new Error(
++        `Post for Me request failed (${response.status})`
++      );
++      error.status = response.status;
++      throw error;
++    }
++    return body;
++  }
++
++  private async postForMeAccount(accountId: string) {
++    const response = await this.postForMeRequest(
++      `/v1/social-accounts/${encodeURIComponent(accountId)}`
++    );
++    return response?.data ?? response;
++  }
++
++  async disconnectAccount(integration: Integration) {
++    if (!integration.token.startsWith('postforme:')) return;
++    const accountId = integration.token.slice('postforme:'.length);
++    const account = await this.postForMeAccount(accountId);
++    if (
++      account?.id !== accountId ||
++      account?.platform !== 'tiktok' ||
++      account?.external_id !== integration.organizationId
++    ) {
++      throw new Error('Post for Me account does not belong to this organization');
++    }
++    if (account.status === 'disconnected') return;
++    if (account.status !== 'connected') {
++      throw new Error('Post for Me account status cannot be safely disconnected');
++    }
++    await this.postForMeRequest(
++      `/v1/social-accounts/${encodeURIComponent(accountId)}/disconnect`,
++      { method: 'POST', body: '{}' }
++    );
++  }
++
++  private async postForMePostByExternalId(externalId: string) {
++    const response = await this.postForMeRequest(
++      `/v1/social-posts?external_id=${encodeURIComponent(externalId)}`
++    );
++    const posts = response?.data ?? response;
++    if (!Array.isArray(posts)) {
++      throw new Error('Post for Me returned an invalid social posts response');
++    }
++    const matches = posts.filter((post) => post?.external_id === externalId);
++    if (matches.length > 1) {
++      throw new Error('Post for Me returned duplicate external post IDs');
++    }
++    return matches[0] ?? null;
++  }
++
++  private async verifyPostForMeAccount(
++    accountId: string,
++    organizationId: string
++  ) {
++    const account = await this.postForMeAccount(accountId);
++    if (
++      account?.id !== accountId ||
++      account?.platform !== 'tiktok' ||
++      account?.status !== 'connected' ||
++      account?.external_id !== organizationId
++    ) {
++      throw new Error('Post for Me account does not belong to this organization');
++    }
++    return account;
++  }
++
++  async resolveOAuthCallback(callback: Record<string, any>) {
++    if (!this.postForMeEnabled()) {
++      throw new Error('Post for Me TikTok adapter is disabled or unconfigured');
++    }
++    if (
++      callback?.provider !== 'tiktok' ||
++      callback?.projectId !== process.env.POSTFORME_PROJECT_ID ||
++      callback?.isSuccess !== 'true' ||
++      String(callback?.failedAccountIds || '').trim() !== ''
++    ) {
++      throw new Error(
++        'TikTok connection was cancelled or returned invalid callback data'
++      );
++    }
++    const accountIds = String(callback?.accountIds || '')
++      .split(',')
++      .map((value) => value.trim())
++      .filter(Boolean);
++    if (accountIds.length !== 1) {
++      throw new Error('Connect exactly one TikTok account per Postiz channel');
++    }
++
++    // The account lookup is authoritative: never accept organization/account
++    // ownership asserted by the browser. The vendor account external_id was
++    // set from the authenticated Postiz organization when OAuth started.
++    const account = await this.postForMeAccount(accountIds[0]);
++    if (
++      account?.id !== accountIds[0] ||
++      account?.platform !== 'tiktok' ||
++      account?.status !== 'connected' ||
++      !account?.external_id
++    ) {
++      throw new Error('Post for Me did not return a connected TikTok account');
++    }
++    const organizationId = String(account.external_id);
++    const state = await ioRedis.getdel(
++      `postforme:tiktok:pending:${organizationId}`
++    );
++    if (!state) {
++      throw new Error('TikTok connection transaction expired or was already used');
++    }
++    const [storedOrganization, verifier] = await Promise.all([
++      ioRedis.get(`organization:${state}`),
++      ioRedis.get(`login:${state}`),
++    ]);
++    if (
++      storedOrganization !== organizationId ||
++      verifier !== `postforme:${state}`
++    ) {
++      throw new Error(
++        'TikTok connection transaction does not match this organization'
++      );
++    }
++    return { state, code: account.id };
++  }
++
+@@ -296,0 +445,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++    if (refreshToken.startsWith('postforme:')) {
++      throw new Error('Post for Me TikTok account refresh is not supported');
++    }
+@@ -341,1 +492,55 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+-  async generateAuthUrl() {
++  async generateAuthUrl(_clientInformation?: any, organizationId?: string) {
++    if (this.identifier === 'tiktok-postforme') {
++      if (!this.postForMeEnabled()) {
++        throw new Error('Post for Me TikTok adapter is disabled or unconfigured');
++      }
++      if (!organizationId) {
++        throw new Error(
++          'Post for Me OAuth requires an authenticated organization'
++        );
++      }
++      const authResponse = await this.postForMeRequest(
++        '/v1/social-accounts/auth-url',
++        {
++          method: 'POST',
++          body: JSON.stringify({
++            platform: 'tiktok',
++            external_id: organizationId,
++            permissions: ['posts', 'feeds'],
++            force_reauth: true,
++          }),
++        }
++      );
++      const url = authResponse?.url ?? authResponse?.data?.url;
++      let parsedUrl: URL | undefined;
++      try {
++        parsedUrl = new URL(url);
++      } catch {
++        parsedUrl = undefined;
++      }
++      if (
++        !parsedUrl ||
++        parsedUrl.protocol !== 'https:' ||
++        parsedUrl.username ||
++        parsedUrl.password ||
++        (parsedUrl.port && parsedUrl.port !== '443') ||
++        !['www.tiktok.com', 'tiktok.com'].includes(parsedUrl.hostname)
++      ) {
++        throw new Error('Post for Me returned an invalid authorization URL');
++      }
++      const state = makeSecureId(32);
++      const transaction = await ioRedis.set(
++        `postforme:tiktok:pending:${organizationId}`,
++        state,
++        'EX',
++        600,
++        'NX'
++      );
++      if (transaction !== 'OK') {
++        throw new Error(
++          'A TikTok connection is already in progress for this organization'
++        );
++      }
++      return { url, codeVerifier: `postforme:${state}`, state };
++    }
++
+@@ -367,0 +573,22 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++    if (
++      this.identifier === 'tiktok-postforme' &&
++      !params.codeVerifier.startsWith('postforme:')
++    ) {
++      throw new Error('Invalid Post for Me TikTok authentication state');
++    }
++    if (params.codeVerifier.startsWith('postforme:')) {
++      const state = params.codeVerifier.slice('postforme:'.length);
++      const organizationId = await ioRedis.get(`organization:${state}`);
++      if (!organizationId || !params.code) {
++        throw new Error('Post for Me TikTok callback is missing its tenant or account');
++      }
++      const account = await this.verifyPostForMeAccount(params.code, organizationId);
++      return {
++        id: account.id,
++        name: account.username || account.user_id || 'TikTok',
++        accessToken: `postforme:${account.id}`,
++        picture: account.profile_photo_url || '',
++        username: account.username || account.user_id || account.id,
++      };
++    }
++
+@@ -447,1 +674,9 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+-    pendingData: { publishId: string },
++    pendingData: {
++      publishId?: string;
++      kind?: string;
++      postId?: string;
++      accountId?: string;
++      organizationId?: string;
++      externalId?: string;
++      postKey?: string;
++    },
+@@ -449,0 +685,99 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++    if (
++      this.identifier === 'tiktok-postforme' &&
++      !accessToken.startsWith('postforme:')
++    ) {
++      throw new Error('Invalid Post for Me TikTok account reference');
++    }
++    if (accessToken.startsWith('postforme:')) {
++      const accountId = accessToken.slice('postforme:'.length);
++      if (
++        pendingData?.kind !== 'postforme' ||
++        pendingData.accountId !== accountId ||
++        pendingData.organizationId !== integration.organizationId ||
++        !pendingData.externalId ||
++        pendingData.externalId !==
++          `postiz:${integration.organizationId}:${integration.id}:${pendingData.postKey}`
++      ) {
++        throw new Error('Invalid Post for Me pending state');
++      }
++      await this.verifyPostForMeAccount(accountId, integration.organizationId);
++      const post = pendingData.postId
++        ? undefined
++        : await this.postForMePostByExternalId(pendingData.externalId);
++      if (!pendingData.postId && !post) {
++        return { status: 'pending', pendingData };
++      }
++      const postId = pendingData.postId || post?.id;
++      if (
++        typeof postId !== 'string' ||
++        (post?.external_id && post.external_id !== pendingData.externalId)
++      ) {
++        throw new Error('Post for Me post does not match the pending request');
++      }
++      const response = await this.postForMeRequest(
++        `/v1/social-post-results?post_id=${encodeURIComponent(
++          postId
++        )}&limit=2`
++      );
++      const results = response?.data ?? response;
++      if (!Array.isArray(results)) {
++        throw new Error('Post for Me returned an invalid results response');
++      }
++      if (!results.length) {
++        return { status: 'pending', pendingData };
++      }
++      if (
++        results.length !== 1 ||
++        results[0]?.social_account_id !== accountId ||
++        results[0]?.post_id !== postId
++      ) {
++        throw new Error(
++          'Post for Me results do not match the connected TikTok account'
++        );
++      }
++      const result = results[0];
++      if (result.success !== true) {
++        if (result.success === false) {
++          const errorMessage =
++            typeof result.error === 'string'
++              ? result.error
++              : result.error?.message || 'TikTok publishing failed';
++          throw new BadBody(
++            this.identifier,
++            JSON.stringify(result),
++            '',
++            String(errorMessage).slice(0, 500)
++          );
++        }
++        return { status: 'pending', pendingData };
++      }
++      const platformData = result.platform_data;
++      let platformUrl: URL | undefined;
++      try {
++        platformUrl = new URL(platformData?.url);
++      } catch {
++        platformUrl = undefined;
++      }
++      if (
++        typeof platformData?.id !== 'string' ||
++        !platformUrl ||
++        platformUrl.protocol !== 'https:' ||
++        ![
++          'www.tiktok.com',
++          'm.tiktok.com',
++          'vm.tiktok.com',
++          'vt.tiktok.com',
++        ].includes(platformUrl.hostname)
++      ) {
++        return { status: 'pending', pendingData };
++      }
++      await ioRedis.del(
++        `postforme:tiktok:submitted:${pendingData.externalId}`
++      );
++      return {
++        status: 'completed',
++        postId: platformData.id,
++        releaseURL: platformUrl.toString(),
++      };
++    }
++
+@@ -858,0 +1193,186 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++    if (accessToken.startsWith('postforme:')) {
++      if (!this.postForMeEnabled()) {
++        throw new Error('Post for Me TikTok adapter is disabled or unconfigured');
++      }
++      const accountId = accessToken.slice('postforme:'.length);
++      await this.verifyPostForMeAccount(accountId, integration.organizationId);
++      const externalId = `postiz:${integration.organizationId}:${integration.id}:${firstPost.id}`;
++      const media = (firstPost?.media || []).map((item) => {
++        let parsed: URL;
++        try {
++          parsed = new URL(item.path);
++        } catch {
++          throw new Error('Post for Me requires publicly reachable media URLs');
++        }
++        if (parsed.protocol !== 'https:') {
++          throw new Error('Post for Me requires HTTPS media URLs');
++        }
++        return { url: item.path };
++      });
++      if (!media.length) {
++        throw new Error('TikTok requires at least one media attachment');
++      }
++      const settings: any = firstPost?.settings || {};
++      const privacyStatus: Record<string, string> = {
++        PUBLIC_TO_EVERYONE: 'public',
++        MUTUAL_FOLLOW_FRIENDS: 'friends',
++        FOLLOWER_OF_CREATOR: 'followers',
++        SELF_ONLY: 'private',
++      };
++      const mappedPrivacyStatus = privacyStatus[settings.privacy_level];
++      if (!mappedPrivacyStatus) {
++        throw new Error('TikTok privacy setting is missing or unsupported');
++      }
++      const lockKey = `postforme:tiktok:publish-lock:${externalId}`;
++      const lockToken = makeSecureId(16);
++      const lockResult = await ioRedis.set(lockKey, lockToken, 'EX', 600, 'NX');
++      if (lockResult !== 'OK') {
++        return [
++          {
++            id: firstPost.id,
++            postId: externalId,
++            releaseURL: '',
++            status: 'pending',
++            pendingData: {
++              kind: 'postforme',
++              externalId,
++              postKey: firstPost.id,
++              accountId,
++              organizationId: integration.organizationId,
++            },
++          },
++        ];
++      }
++      try {
++        let post = await this.postForMePostByExternalId(externalId);
++        if (!post) {
++          // external_id is a lookup key, not a provider-side idempotency key.
++          // Keep a Redis reservation once submission may have started so a
++          // retry cannot race an eventually consistent lookup into a duplicate.
++          const reservationKey = `postforme:tiktok:submitted:${externalId}`;
++          const reservation = await ioRedis.set(reservationKey, 'pending', 'NX');
++          if (reservation !== 'OK') {
++            return [
++              {
++                id: firstPost.id,
++                postId: externalId,
++                releaseURL: '',
++                status: 'pending',
++                pendingData: {
++                  kind: 'postforme',
++                  externalId,
++                  postKey: firstPost.id,
++                  accountId,
++                  organizationId: integration.organizationId,
++                },
++              },
++            ];
++          }
++          try {
++            const created = await this.postForMeRequest('/v1/social-posts', {
++              method: 'POST',
++              body: JSON.stringify({
++                external_id: externalId,
++                caption: firstPost.message || '',
++                media,
++                social_accounts: [accountId],
++                platform_configurations: {
++                  tiktok: {
++                    title: settings.title,
++                    privacy_status: mappedPrivacyStatus,
++                    allow_comment: settings.comment,
++                    allow_duet: settings.duet,
++                    allow_stitch: settings.stitch,
++                    is_ai_generated: settings.video_made_with_ai,
++                    disclose_branded_content: settings.brand_content_toggle,
++                    disclose_your_brand: settings.brand_organic_toggle,
++                    auto_add_music: settings.autoAddMusic === 'yes',
++                  },
++                },
++              }),
++            });
++            post = created?.data ?? created;
++          } catch (error: any) {
++            const status = Number(error?.status);
++            const definitelyRejected =
++              status >= 400 &&
++              status < 500 &&
++              ![408, 409, 425, 429].includes(status);
++            if (definitelyRejected) {
++              await ioRedis.del(reservationKey);
++              throw error;
++            }
++            // A timeout or server error may happen after Post for Me accepted
++            // the post. Reconcile once; retain the reservation if uncertain.
++            try {
++              post = await this.postForMePostByExternalId(externalId);
++            } catch {
++              post = null;
++            }
++            if (!post) {
++              return [
++                {
++                  id: firstPost.id,
++                  postId: externalId,
++                  releaseURL: '',
++                  status: 'pending',
++                  pendingData: {
++                    kind: 'postforme',
++                    externalId,
++                    postKey: firstPost.id,
++                    accountId,
++                    organizationId: integration.organizationId,
++                  },
++                },
++              ];
++            }
++          }
++        }
++      if (typeof post?.id !== 'string') {
++        // A malformed 2xx response may still mean the provider accepted the
++        // post. Keep the workflow pending so it reconciles by external_id
++        // instead of blindly issuing another create request.
++        return [
++          {
++            id: firstPost.id,
++            postId: externalId,
++            releaseURL: '',
++            status: 'pending',
++            pendingData: {
++              kind: 'postforme',
++              externalId,
++              postKey: firstPost.id,
++              accountId,
++              organizationId: integration.organizationId,
++            },
++          },
++        ];
++      }
++      return [
++        {
++          id: firstPost.id,
++          postId: post.id,
++          releaseURL: '',
++          status: 'pending',
++          pendingData: {
++            kind: 'postforme',
++            postId: post.id,
++            externalId,
++            postKey: firstPost.id,
++            accountId,
++            organizationId: integration.organizationId,
++          },
++        },
++      ];
++      } finally {
++        await ioRedis.eval(
++          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
++          1,
++          lockKey,
++          lockToken
++        );
++      }
++    }
++    if (this.identifier === 'tiktok-postforme') {
++      throw new Error('Invalid Post for Me TikTok account reference');
++    }
+@@ -987,0 +1508,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++    if (accessToken.startsWith('postforme:')) {
++      throw new Error('TikTok analytics are not supported by the Post for Me adapter');
++    }
+@@ -1127,0 +1651,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++    if (accessToken.startsWith('postforme:')) {
++      throw new Error('Post for Me media reconciliation is not supported');
++    }
+@@ -1217,0 +1744,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++    if (accessToken.startsWith('postforme:')) {
++      throw new Error('Post for Me release URL lookup requires account-scoped results');
++    }
+@@ -1247,0 +1777,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++    if (accessToken.startsWith('postforme:')) {
++      throw new Error('TikTok post analytics are not supported by the Post for Me adapter');
++    }
+@@ -1315,0 +1848,6 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
++
++/** Separate provider identity keeps existing native TikTok channels intact. */
++export class PostForMeTiktokProvider extends TiktokProvider {
++  override identifier = 'tiktok-postforme';
++  override name = 'TikTok (Post for Me)';
++}
+diff --git a/libraries/nestjs-libraries/src/redis/redis.service.ts b/libraries/nestjs-libraries/src/redis/redis.service.ts
+index c54b142..c3c768e 100644
+--- a/libraries/nestjs-libraries/src/redis/redis.service.ts
++++ b/libraries/nestjs-libraries/src/redis/redis.service.ts
+@@ -5,0 +6,1 @@ class MockRedis {
++  private expirations = new Map<string, number>();
+@@ -11,1 +12,15 @@ class MockRedis {
+-  async set(key: string, value: any) {
++  async set(key: string, value: any, ...options: any[]) {
++    const expiresAt = this.expirations.get(key);
++    if (expiresAt && Date.now() >= expiresAt) {
++      this.data.delete(key);
++      this.expirations.delete(key);
++    }
++    if (options.includes('NX') && this.data.has(key)) {
++      return null;
++    }
++    const exIndex = options.indexOf('EX');
++    if (exIndex >= 0) {
++      this.expirations.set(key, Date.now() + Number(options[exIndex + 1]) * 1000);
++    } else {
++      this.expirations.delete(key);
++    }
+@@ -15,0 +31,14 @@ class MockRedis {
++  async getdel(key: string) {
++    const value = this.data.get(key);
++    this.data.delete(key);
++    return value;
++  }
++
++  async eval(_script: string, _keyCount: number, key: string, token: string) {
++    if (this.data.get(key) === token) {
++      this.data.delete(key);
++      return 1;
++    }
++    return 0;
++  }
++
