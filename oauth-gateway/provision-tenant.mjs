@@ -20,6 +20,9 @@ const oauthHosts = {
   threads: ['www.threads.net'],
   pinterest: ['www.pinterest.com'],
   reddit: ['www.reddit.com'],
+  discord: ['discord.com'],
+  slack: ['slack.com'],
+  tumblr: ['www.tumblr.com'],
 };
 
 if (!externalId || !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(externalId) ||

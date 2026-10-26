@@ -45,6 +45,7 @@ const providerLabels = {
   facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok',
   'tiktok-business': 'TikTok for Business', youtube: 'YouTube',
   linkedin: 'LinkedIn', x: 'X', threads: 'Threads', pinterest: 'Pinterest', reddit: 'Reddit',
+  discord: 'Discord', slack: 'Slack', tumblr: 'Tumblr',
 };
 
 function reply(res, status, data, headers = {}) {
