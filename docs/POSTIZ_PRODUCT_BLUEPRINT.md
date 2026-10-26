@@ -81,6 +81,8 @@ La guía oficial vigente (actualizada el 4-ago-2026) dice que las apps no pueden
 
 La documentación de Direct Post también dice que los clientes sin auditoría solo publican contenido privado. Para publicación pública hace falta aprobar `video.publish`, probar la integración y completar auditoría. El OAuth TikTok independiente de Bella funciona con `video.publish`, pero no es la app OAuth de Postiz y no levanta esta restricción. No reenviar la revisión hasta que el flujo Postiz con cliente real esté operativo y la demo muestre ese mismo producto/dominio.
 
+La ruta TikTok también debe cumplir la UX de Content Posting API aunque el transporte lo gestione Quickstart: obtener y mostrar el nombre del creador y sus opciones actuales, no preseleccionar privacidad, desactivar interacciones que el creador haya bloqueado, iniciar comentarios/dueto/stitch desactivados, mostrar vista previa y consentimiento de Music Usage Confirmation, y exigir el aviso comercial correcto cuando corresponda. La pantalla compartida actual de Postiz usa una lista estática de privacidad con `PUBLIC_TO_EVERYONE` como valor inicial y comentarios activados por defecto; por tanto, no demuestra cumplimiento para cuentas creator distintas. No habilitar publicación directa pública hasta confirmar con Post for Me quién es responsable de esta UX en Quickstart, si su API expone creator info actualizado y cómo se satisfacen estos requisitos desde la interfaz de Postiz. Si la API no entrega esa información, adaptar el flujo o elegir otra vía aprobada antes de conectar Bella.
+
 ## Fuentes
 
 - TikTok App Review Guidelines: https://developers.tiktok.com/docs/en/app-review-guidelines
