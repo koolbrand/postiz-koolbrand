@@ -1,11 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { userInfo } from 'node:os';
 import { createClient } from 'redis';
 
-const [tenantSlug, provider, actorFlag, actor] = process.argv.slice(2);
-if (!tenantSlug || !provider || actorFlag !== '--actor' || !actor ||
-    !/^[^\s@]+@koolbrand\.com$/i.test(actor)) {
-  console.error('Uso: node issue-link.mjs <tenant> <provider> --actor <email-koolbrand>');
+const [tenantSlug, provider] = process.argv.slice(2);
+const processUser = userInfo().username;
+const processUid = typeof process.getuid === 'function' ? process.getuid() : null;
+if (!tenantSlug || !provider || !processUser || !Number.isInteger(processUid) || processUid < 1 ||
+    (typeof process.geteuid === 'function' && process.geteuid() !== processUid)) {
+  console.error('Uso: node issue-link.mjs <tenant> <provider> (ejecutar como usuario de servicio no-root, sin cambiar UID)');
   process.exit(2);
 }
 
@@ -47,7 +50,8 @@ try {
 
 console.log(JSON.stringify({
   event: 'oauth_link_issued',
-  operatorDeclared: actor,
+  processSystemUser: processUser,
+  processUid,
   tenant: tenantSlug,
   provider,
   issuedAt: new Date().toISOString(),
