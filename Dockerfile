@@ -34,7 +34,7 @@ RUN cp /app/var/docker/nginx.conf /etc/nginx/nginx.conf \
     && sed -i 's/^user[[:space:]]\+www;/user www-data;/' /etc/nginx/nginx.conf
 RUN sh /kb-marca/idioma-es.sh
 # El postinstall genera Prisma Client; ejecutarlo después del patch para incluir su schema.
-RUN pnpm install --offline
+RUN pnpm install --prefer-offline
 RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
 
 # 1) CSS: cada CSS compilado de Next (static/css hasta v2.10, static/chunks con Turbopack desde v2.2x) importa al principio Google Fonts y nuestra capa
