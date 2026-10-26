@@ -1102,7 +1102,7 @@ diff --git a/libraries/nestjs-libraries/src/redis/redis.service.ts b/libraries/n
 index c54b142..c3c768e 100644
 --- a/libraries/nestjs-libraries/src/redis/redis.service.ts
 +++ b/libraries/nestjs-libraries/src/redis/redis.service.ts
-@@ -8,0 +9,1 @@ class MockRedis {
+@@ -5,0 +6,1 @@ class MockRedis {
 +  private expirations = new Map<string, number>();
 @@ -11,1 +12,15 @@ class MockRedis {
 -  async set(key: string, value: any) {
