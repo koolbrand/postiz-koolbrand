@@ -2,7 +2,7 @@ diff --git a/apps/backend/src/api/routes/enterprise.controller.ts b/apps/backend
 index fef89ef..728b4b9 100644
 --- a/apps/backend/src/api/routes/enterprise.controller.ts
 +++ b/apps/backend/src/api/routes/enterprise.controller.ts
-@@ -1 +1,2 @@
+@@ -1,1 +1,2 @@
 -import { Body, Controller, Param, Post, Res } from '@nestjs/common';
 +import { Body, Controller, Headers, HttpException, Param, Post, Res } from '@nestjs/common';
 +import { createHmac, timingSafeEqual } from 'crypto';
@@ -89,10 +89,10 @@ index bfd1d8a..c293273 100644
 +    ) {
 +      throw new Error('Post for Me TikTok adapter is disabled or unconfigured');
 +    }
-@@ -259 +265 @@ export class IntegrationsController {
+@@ -259,1 +265,1 @@ export class IntegrationsController {
 -        await integrationProvider.generateAuthUrl(getExternalUrl);
 +        await integrationProvider.generateAuthUrl(getExternalUrl, org.id);
-@@ -419,6 +426,14 @@ export class IntegrationsController {
+@@ -419,6 +425,14 @@ export class IntegrationsController {
    @Delete('/')
    async deleteChannel(
      @GetOrgFromRequest() org: Organization,
@@ -131,41 +131,41 @@ index 0c0df0c..01b6669 100644
 +        : undefined;
 +    const callbackState = callbackResolution?.state ?? body.state;
 +    const callbackCode = callbackResolution?.code ?? body.code;
-@@ -63 +81 @@ export class NoAuthIntegrationsController {
+@@ -63,1 +81,1 @@ export class NoAuthIntegrationsController {
 -      : await ioRedis.get(`login:${body.state}`);
 +      : await ioRedis.get(`login:${callbackState}`);
-@@ -72 +90 @@ export class NoAuthIntegrationsController {
+@@ -72,1 +90,1 @@ export class NoAuthIntegrationsController {
 -    const organization = await ioRedis.get(`organization:${body.state}`);
 +    const organization = await ioRedis.get(`organization:${callbackState}`);
-@@ -80 +98 @@ export class NoAuthIntegrationsController {
+@@ -80,1 +98,1 @@ export class NoAuthIntegrationsController {
 -      await ioRedis.del(`login:${body.state}`);
 +      await ioRedis.del(`login:${callbackState}`);
-@@ -84 +102 @@ export class NoAuthIntegrationsController {
+@@ -84,1 +102,1 @@ export class NoAuthIntegrationsController {
 -      ? await ioRedis.get(`external:${body.state}`)
 +      ? await ioRedis.get(`external:${callbackState}`)
-@@ -88 +106 @@ export class NoAuthIntegrationsController {
+@@ -88,1 +106,1 @@ export class NoAuthIntegrationsController {
 -      await ioRedis.del(`external:${body.state}`);
 +      await ioRedis.del(`external:${callbackState}`);
-@@ -91 +109 @@ export class NoAuthIntegrationsController {
+@@ -91,1 +109,1 @@ export class NoAuthIntegrationsController {
 -    const refresh = await ioRedis.get(`refresh:${body.state}`);
 +    const refresh = await ioRedis.get(`refresh:${callbackState}`);
-@@ -93 +111 @@ export class NoAuthIntegrationsController {
+@@ -93,1 +111,1 @@ export class NoAuthIntegrationsController {
 -      await ioRedis.del(`refresh:${body.state}`);
 +      await ioRedis.del(`refresh:${callbackState}`);
-@@ -96 +114 @@ export class NoAuthIntegrationsController {
+@@ -96,1 +114,1 @@ export class NoAuthIntegrationsController {
 -    const onboarding = await ioRedis.get(`onboarding:${body.state}`);
 +    const onboarding = await ioRedis.get(`onboarding:${callbackState}`);
-@@ -98 +116 @@ export class NoAuthIntegrationsController {
+@@ -98,1 +116,1 @@ export class NoAuthIntegrationsController {
 -      await ioRedis.del(`onboarding:${body.state}`);
 +      await ioRedis.del(`onboarding:${callbackState}`);
-@@ -116 +134 @@ export class NoAuthIntegrationsController {
+@@ -116,1 +134,1 @@ export class NoAuthIntegrationsController {
 -            code: body.code,
 +            code: callbackCode,
 diff --git a/apps/backend/src/api/routes/users.controller.ts b/apps/backend/src/api/routes/users.controller.ts
 index fccade5..d6c549b 100644
 --- a/apps/backend/src/api/routes/users.controller.ts
 +++ b/apps/backend/src/api/routes/users.controller.ts
-@@ -98 +98,3 @@ export class UsersController {
+@@ -98,1 +98,3 @@ export class UsersController {
 -      totalChannels: !process.env.STRIPE_PUBLISHABLE_KEY
 +      totalChannels: organization?.managedExternalId
 +        ? 30
@@ -174,10 +174,10 @@ index fccade5..d6c549b 100644
 +        organization?.managedExternalId
 +          ? 'PRO'
 +          :
-@@ -119 +124 @@ export class UsersController {
+@@ -119,1 +124,1 @@ export class UsersController {
 -        organization?.users[0]?.role === 'SUPERADMIN' ||
 +        !organization?.managedExternalId &&
-@@ -121 +126,3 @@ export class UsersController {
+@@ -121,1 +126,3 @@ export class UsersController {
 -        organization?.users[0]?.role === 'ADMIN'
 +        (organization?.users[0]?.role === 'SUPERADMIN' ||
 +        // @ts-ignore
@@ -190,13 +190,13 @@ diff --git a/apps/backend/src/services/auth/auth.service.ts b/apps/backend/src/s
 index 89706de..8ecf9ec 100644
 --- a/apps/backend/src/services/auth/auth.service.ts
 +++ b/apps/backend/src/services/auth/auth.service.ts
-@@ -23,4 +23 @@ export class AuthService {
+@@ -23,4 +23,1 @@ export class AuthService {
 -    if (
 -      process.env.DISABLE_REGISTRATION !== 'true' ||
 -      provider === Provider.GENERIC
 -    ) {
 +    if (process.env.DISABLE_REGISTRATION !== 'true') {
-@@ -29 +26,3 @@ export class AuthService {
+@@ -29,1 +26,3 @@ export class AuthService {
 -    return (await this._organizationService.getCount()) === 0;
 +    // Existing provider identities are returned before this check.
 +    // Closed registration must not let OAuth create a new organization.
@@ -235,9 +235,9 @@ diff --git a/apps/frontend/src/components/new-launch/providers/tiktok/tiktok.pro
 index 99bb9af..ebc7510 100644
 --- a/apps/frontend/src/components/new-launch/providers/tiktok/tiktok.provider.tsx
 +++ b/apps/frontend/src/components/new-launch/providers/tiktok/tiktok.provider.tsx
-@@ -4,0 +5 @@ import {
+@@ -4,0 +5,1 @@ import {
 +  useEffect,
-@@ -26 +27 @@ const TikTokSettings: FC<{
+@@ -26,1 +27,1 @@ const TikTokSettings: FC<{
 -  const { watch, register } = useSettings();
 +  const { watch, register, setValue } = useSettings();
 @@ -32,0 +34,7 @@ const TikTokSettings: FC<{
@@ -469,7 +469,7 @@ diff --git a/libraries/nestjs-libraries/src/database/prisma/schema.prisma b/libr
 index 2fd85ec..ba9f536 100644
 --- a/libraries/nestjs-libraries/src/database/prisma/schema.prisma
 +++ b/libraries/nestjs-libraries/src/database/prisma/schema.prisma
-@@ -13,0 +14 @@ model Organization {
+@@ -13,0 +14,1 @@ model Organization {
 +  managedExternalId   String?              @unique
 diff --git a/libraries/nestjs-libraries/src/dtos/integrations/connect.integration.dto.ts b/libraries/nestjs-libraries/src/dtos/integrations/connect.integration.dto.ts
 index a74bfb5..af73a0f 100644
@@ -506,10 +506,10 @@ diff --git a/libraries/nestjs-libraries/src/integrations/integration.manager.ts 
 index ac26c81..cef309d 100644
 --- a/libraries/nestjs-libraries/src/integrations/integration.manager.ts
 +++ b/libraries/nestjs-libraries/src/integrations/integration.manager.ts
-@@ -14 +14 @@ import { YoutubeProvider } from '@gitroom/nestjs-libraries/integrations/social/y
+@@ -14,1 +14,1 @@ import { YoutubeProvider } from '@gitroom/nestjs-libraries/integrations/social/y
 -import { TiktokProvider } from '@gitroom/nestjs-libraries/integrations/social/tiktok.provider';
 +import { PostForMeTiktokProvider, TiktokProvider } from '@gitroom/nestjs-libraries/integrations/social/tiktok.provider';
-@@ -53,0 +54 @@ export const socialIntegrationList: Array<SocialAbstract & SocialProvider> = [
+@@ -53,0 +54,1 @@ export const socialIntegrationList: Array<SocialAbstract & SocialProvider> = [
 +  new PostForMeTiktokProvider(),
 @@ -88,0 +90,10 @@ export class IntegrationManager {
 +    if (
@@ -526,7 +526,7 @@ diff --git a/libraries/nestjs-libraries/src/integrations/social/social.integrati
 index 261b84e..ce7d750 100644
 --- a/libraries/nestjs-libraries/src/integrations/social/social.integrations.interface.ts
 +++ b/libraries/nestjs-libraries/src/integrations/social/social.integrations.interface.ts
-@@ -24 +24,2 @@ export interface IAuthenticator {
+@@ -24,1 +24,2 @@ export interface IAuthenticator {
 -    clientInformation?: ClientInformation
 +    clientInformation?: ClientInformation,
 +    organizationId?: string
@@ -543,7 +543,7 @@ diff --git a/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.
 index 960663b..cba74cd 100644
 --- a/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
 +++ b/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
-@@ -24,0 +25 @@ import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorato
+@@ -24,0 +25,1 @@ import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorato
 +import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 @@ -53,0 +55,147 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +  private postForMeEnabled() {
@@ -697,7 +697,7 @@ index 960663b..cba74cd 100644
 +    if (refreshToken.startsWith('postforme:')) {
 +      throw new Error('Post for Me TikTok account refresh is not supported');
 +    }
-@@ -341 +492,55 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -341,1 +492,55 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 -  async generateAuthUrl() {
 +  async generateAuthUrl(_clientInformation?: any, organizationId?: string) {
 +    if (this.identifier === 'tiktok-postforme') {
@@ -777,7 +777,7 @@ index 960663b..cba74cd 100644
 +      };
 +    }
 +
-@@ -447 +674,9 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -447,1 +674,9 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 -    pendingData: { publishId: string },
 +    pendingData: {
 +      publishId?: string;
@@ -788,7 +788,7 @@ index 960663b..cba74cd 100644
 +      externalId?: string;
 +      postKey?: string;
 +    },
-@@ -449,0 +685,96 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -449,0 +685,99 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (
 +      this.identifier === 'tiktok-postforme' &&
 +      !accessToken.startsWith('postforme:')
@@ -878,6 +878,9 @@ index 960663b..cba74cd 100644
 +      ) {
 +        return { status: 'pending', pendingData };
 +      }
++      await ioRedis.del(
++        `postforme:tiktok:submitted:${pendingData.externalId}`
++      );
 +      return {
 +        status: 'completed',
 +        postId: platformData.id,
@@ -885,7 +888,7 @@ index 960663b..cba74cd 100644
 +      };
 +    }
 +
-@@ -858,0 +1190,134 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -858,0 +1193,186 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      if (!this.postForMeEnabled()) {
 +        throw new Error('Post for Me TikTok adapter is disabled or unconfigured');
@@ -919,49 +922,35 @@ index 960663b..cba74cd 100644
 +      if (!mappedPrivacyStatus) {
 +        throw new Error('TikTok privacy setting is missing or unsupported');
 +      }
-+      let post = await this.postForMePostByExternalId(externalId);
-+      if (!post) {
-+        try {
-+          const created = await this.postForMeRequest('/v1/social-posts', {
-+            method: 'POST',
-+            body: JSON.stringify({
-+              external_id: externalId,
-+              caption: firstPost.message || '',
-+              media,
-+              social_accounts: [accountId],
-+              platform_configurations: {
-+                tiktok: {
-+                  title: settings.title,
-+                  privacy_status: mappedPrivacyStatus,
-+                  allow_comment: settings.comment,
-+                  allow_duet: settings.duet,
-+                  allow_stitch: settings.stitch,
-+                  is_ai_generated: settings.video_made_with_ai,
-+                  disclose_branded_content: settings.brand_content_toggle,
-+                  disclose_your_brand: settings.brand_organic_toggle,
-+                  auto_add_music: settings.autoAddMusic === 'yes',
-+                },
-+              },
-+            }),
-+          });
-+          post = created?.data ?? created;
-+        } catch (error: any) {
-+          const status = Number(error?.status);
-+          const definitelyRejected =
-+            status >= 400 &&
-+            status < 500 &&
-+            ![408, 409, 425, 429].includes(status);
-+          if (definitelyRejected) {
-+            throw error;
-+          }
-+          // A timeout or server error may happen after Post for Me accepted the
-+          // post. Reconcile by external_id and never immediately submit again.
-+          try {
-+            post = await this.postForMePostByExternalId(externalId);
-+          } catch {
-+            post = null;
-+          }
-+          if (!post) {
++      const lockKey = `postforme:tiktok:publish-lock:${externalId}`;
++      const lockToken = makeSecureId(16);
++      const lockResult = await ioRedis.set(lockKey, lockToken, 'EX', 600, 'NX');
++      if (lockResult !== 'OK') {
++        return [
++          {
++            id: firstPost.id,
++            postId: externalId,
++            releaseURL: '',
++            status: 'pending',
++            pendingData: {
++              kind: 'postforme',
++              externalId,
++              postKey: firstPost.id,
++              accountId,
++              organizationId: integration.organizationId,
++            },
++          },
++        ];
++      }
++      try {
++        let post = await this.postForMePostByExternalId(externalId);
++        if (!post) {
++          // external_id is a lookup key, not a provider-side idempotency key.
++          // Keep a Redis reservation once submission may have started so a
++          // retry cannot race an eventually consistent lookup into a duplicate.
++          const reservationKey = `postforme:tiktok:submitted:${externalId}`;
++          const reservation = await ioRedis.set(reservationKey, 'pending', 'NX');
++          if (reservation !== 'OK') {
 +            return [
 +              {
 +                id: firstPost.id,
@@ -978,8 +967,66 @@ index 960663b..cba74cd 100644
 +              },
 +            ];
 +          }
++          try {
++            const created = await this.postForMeRequest('/v1/social-posts', {
++              method: 'POST',
++              body: JSON.stringify({
++                external_id: externalId,
++                caption: firstPost.message || '',
++                media,
++                social_accounts: [accountId],
++                platform_configurations: {
++                  tiktok: {
++                    title: settings.title,
++                    privacy_status: mappedPrivacyStatus,
++                    allow_comment: settings.comment,
++                    allow_duet: settings.duet,
++                    allow_stitch: settings.stitch,
++                    is_ai_generated: settings.video_made_with_ai,
++                    disclose_branded_content: settings.brand_content_toggle,
++                    disclose_your_brand: settings.brand_organic_toggle,
++                    auto_add_music: settings.autoAddMusic === 'yes',
++                  },
++                },
++              }),
++            });
++            post = created?.data ?? created;
++          } catch (error: any) {
++            const status = Number(error?.status);
++            const definitelyRejected =
++              status >= 400 &&
++              status < 500 &&
++              ![408, 409, 425, 429].includes(status);
++            if (definitelyRejected) {
++              await ioRedis.del(reservationKey);
++              throw error;
++            }
++            // A timeout or server error may happen after Post for Me accepted
++            // the post. Reconcile once; retain the reservation if uncertain.
++            try {
++              post = await this.postForMePostByExternalId(externalId);
++            } catch {
++              post = null;
++            }
++            if (!post) {
++              return [
++                {
++                  id: firstPost.id,
++                  postId: externalId,
++                  releaseURL: '',
++                  status: 'pending',
++                  pendingData: {
++                    kind: 'postforme',
++                    externalId,
++                    postKey: firstPost.id,
++                    accountId,
++                    organizationId: integration.organizationId,
++                  },
++                },
++              ];
++            }
++          }
 +        }
-+      }
 +      if (typeof post?.id !== 'string') {
 +        // A malformed 2xx response may still mean the provider accepted the
 +        // post. Keep the workflow pending so it reconciles by external_id
@@ -1016,27 +1063,35 @@ index 960663b..cba74cd 100644
 +          },
 +        },
 +      ];
++      } finally {
++        await ioRedis.eval(
++          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
++          1,
++          lockKey,
++          lockToken
++        );
++      }
 +    }
 +    if (this.identifier === 'tiktok-postforme') {
 +      throw new Error('Invalid Post for Me TikTok account reference');
 +    }
-@@ -987,0 +1453,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -987,0 +1508,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('TikTok analytics are not supported by the Post for Me adapter');
 +    }
-@@ -1127,0 +1596,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1127,0 +1651,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('Post for Me media reconciliation is not supported');
 +    }
-@@ -1217,0 +1689,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1217,0 +1744,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('Post for Me release URL lookup requires account-scoped results');
 +    }
-@@ -1247,0 +1722,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1247,0 +1777,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('TikTok post analytics are not supported by the Post for Me adapter');
 +    }
-@@ -1315,0 +1793,6 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1315,0 +1848,6 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +
 +/** Separate provider identity keeps existing native TikTok channels intact. */
 +export class PostForMeTiktokProvider extends TiktokProvider {
@@ -1047,16 +1102,37 @@ diff --git a/libraries/nestjs-libraries/src/redis/redis.service.ts b/libraries/n
 index c54b142..c3c768e 100644
 --- a/libraries/nestjs-libraries/src/redis/redis.service.ts
 +++ b/libraries/nestjs-libraries/src/redis/redis.service.ts
-@@ -11 +11,4 @@ class MockRedis {
+@@ -8,0 +9,1 @@ class MockRedis {
++  private expirations = new Map<string, number>();
+@@ -11,1 +12,15 @@ class MockRedis {
 -  async set(key: string, value: any) {
 +  async set(key: string, value: any, ...options: any[]) {
++    const expiresAt = this.expirations.get(key);
++    if (expiresAt && Date.now() >= expiresAt) {
++      this.data.delete(key);
++      this.expirations.delete(key);
++    }
 +    if (options.includes('NX') && this.data.has(key)) {
 +      return null;
 +    }
-@@ -15,0 +19,6 @@ class MockRedis {
++    const exIndex = options.indexOf('EX');
++    if (exIndex >= 0) {
++      this.expirations.set(key, Date.now() + Number(options[exIndex + 1]) * 1000);
++    } else {
++      this.expirations.delete(key);
++    }
+@@ -15,0 +31,14 @@ class MockRedis {
 +  async getdel(key: string) {
 +    const value = this.data.get(key);
 +    this.data.delete(key);
 +    return value;
++  }
++
++  async eval(_script: string, _keyCount: number, key: string, token: string) {
++    if (this.data.get(key) === token) {
++      this.data.delete(key);
++      return 1;
++    }
++    return 0;
 +  }
 +
