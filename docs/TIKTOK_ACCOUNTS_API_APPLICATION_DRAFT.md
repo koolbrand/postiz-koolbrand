@@ -12,6 +12,12 @@
 
 **Importante:** este texto describe el producto previsto; no afirmar que el flujo esté desplegado o aprobado hasta probarlo en staging y completar el onboarding multi-tenant.
 
+## Evidencia actual de uso (lectura del 26-oct-2026)
+
+- Postiz muestra 12 canales conectados; uno es el TikTok de Koolbrand. Bella tiene Facebook, Instagram y YouTube en Postiz, pero aún no TikTok.
+- El calendario de los últimos 30 días devuelve una publicación de prueba de Koolbrand del 15-oct marcada `PUBLISHED` vía Content Posting API. El enlace resultante apunta a la bandeja de entrada de TikTok (`v_inbox_file`), así que no se debe presentar como publicación pública ni como prueba de acceso de clientes.
+- No afirmar uso multi-cliente en TikTok hasta completar el acceso de Accounts API, conectar una cuenta de cliente en staging con autorización de su titular y verificar publicación/analítica.
+
 ## Scopes solicitados por Postiz
 
 | Scope | Uso previsto en el producto |
