@@ -82,7 +82,7 @@ Operar Postiz en el Mac mini como plataforma de publicación de Koolbrand para v
 
 ## Limitaciones verificadas de TikTok
 
-La guía oficial vigente (actualizada el 4-ago-2026) dice que las apps no pueden ser de uso privado/personal ni seguir en desarrollo/pruebas; el sitio oficial debe estar completo y mostrar enlaces activos a Privacy Policy y Terms of Service directamente, sin abrir un menú. La solicitud necesita explicar cómo se usa cada producto/scope y un vídeo de punta a punta. En una primera revisión debe verse el sandbox; el dominio de la web de la demo debe coincidir con el declarado para la app. Esto encaja con el rechazo de «uso personal/interno»: la página pública por sí sola no basta y falta un Terms of Service visible y un piloto real de cliente.
+La guía oficial vigente de TikTok (actualizada el 4-ago-2026) excluye las herramientas limitadas a uso interno o privado y pone como ejemplo no aceptable una utilidad para que el equipo suba contenido a las cuentas que gestiona. Exige una app destinada a una audiencia amplia y que el titular controle cada publicación. Por eso, que cada cliente autorice OAuth no basta para validar una herramienta cerrada de agencia; un proveedor con credenciales auditadas debe confirmar que su aprobación cubre este uso concreto o la experiencia debe convertirse en un producto abierto a audiencia amplia. La misma guía pide un sitio completo con enlaces directos activos a Privacy Policy y Terms of Service, explicar cada producto/scope y mostrar el flujo de punta a punta en vídeo. Esto encaja con el rechazo de «uso personal/interno»: la página pública por sí sola no basta y falta un Terms of Service visible y un piloto real de cliente.
 
 La documentación de Direct Post también dice que los clientes sin auditoría solo publican contenido privado. Para publicación pública hace falta aprobar `video.publish`, probar la integración y completar auditoría. El OAuth TikTok independiente de Bella funciona con `video.publish`, pero no es la app OAuth de Postiz y no levanta esta restricción. No reenviar la revisión hasta que el flujo Postiz con cliente real esté operativo y la demo muestre ese mismo producto/dominio.
 
@@ -93,6 +93,7 @@ La UX descrita por TikTok para Content Posting API/Direct Post se aplica al adap
 - TikTok App Review Guidelines: https://developers.tiktok.com/docs/en/app-review-guidelines
 - TikTok Developer Guidelines: https://developers.tiktok.com/docs/en/our-guidelines-developer-guidelines
 - TikTok Content Posting API: https://developers.tiktok.com/docs/en/content-posting-api-get-started
+- TikTok Content Sharing Guidelines (incluye uso previsto y publicación directa): https://developers.tiktok.com/docs/en/content-sharing-guidelines
 - TikTok Direct Post API: https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post
 - Postiz Quickstart: https://docs.postiz.com/general/quickstart
 - Postiz self-hosted providers and redirect URI shape: https://docs.postiz.com/self-host/providers/overview
