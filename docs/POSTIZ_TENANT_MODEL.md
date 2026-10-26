@@ -7,7 +7,7 @@
 - Una organización Postiz por cliente; canales, calendario, medios, miembros y analítica quedan dentro de esa organización.
 - Personal interno de Koolbrand es miembro de las organizaciones que gestiona, con el rol mínimo que permita el trabajo.
 - Una API key distinta por organización. La clave vive en el servidor de la pasarela, con acceso restringido; nunca en el navegador, enlaces, tickets o repositorio.
-- Bella, Koolbrand y Northkin aparecen en organizaciones separadas en la lectura en vivo de canales del 26-oct. La asignación visible no demuestra aislamiento de medios, publicaciones, métricas ni miembros; falta comprobar esos límites con usuarios de prueba.
+- Bella aparece en organización separada, pero la lectura repetida de canales sitúa Facebook, Instagram y YouTube de Northkin dentro de Koolbrand. Una primera respuesta aislada los mostró en organización propia y dos respuestas siguientes volvieron a Koolbrand; confirmar desde la instancia antes de migrar. La asignación visible no demuestra aislamiento de medios, publicaciones, métricas ni miembros.
 - Cada autorización social la completa el titular en el dominio oficial de la plataforma. Koolbrand nunca solicita su contraseña ni código 2FA.
 
 ## Flujo de conexión
