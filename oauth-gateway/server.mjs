@@ -42,7 +42,8 @@ try{if(!token)throw new Error('Falta el código del enlace.');const data=await s
 </script></html>`;
 
 const providerLabels = {
-  facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube',
+  facebook: 'Facebook', instagram: 'Instagram', tiktok: 'TikTok',
+  'tiktok-business': 'TikTok for Business', youtube: 'YouTube',
   linkedin: 'LinkedIn', x: 'X', threads: 'Threads', pinterest: 'Pinterest', reddit: 'Reddit',
 };
 

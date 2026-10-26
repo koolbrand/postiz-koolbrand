@@ -24,7 +24,7 @@ Variables requeridas:
 - `PUBLIC_BASE_URL` (URL HTTPS pública de esta pasarela)
 - `TENANTS_FILE` (por defecto `/run/secrets/postiz-oauth-tenants.json`)
 - `LINK_TTL_SECONDS` (60–1800, por defecto 600)
-- `POSTIZ_TENANT_PROVIDERS` (lista separada por comas de `facebook`, `instagram`, `tiktok`, `youtube` o `linkedin` al dar de alta una organización)
+- `POSTIZ_TENANT_PROVIDERS` (lista separada por comas de `facebook`, `instagram`, `tiktok`, `tiktok-business`, `youtube` o `linkedin` al dar de alta una organización)
 
 El CLI toma un bloqueo local al actualizar el registro para evitar que dos altas simultáneas pierdan entradas. Si el proceso se interrumpe antes de retirar el bloqueo, confirma que no siga ejecutándose y elimina manualmente el directorio `postiz-oauth-tenants.json.lock` antes de reintentar.
 

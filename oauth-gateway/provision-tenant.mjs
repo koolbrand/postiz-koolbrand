@@ -13,6 +13,7 @@ const oauthHosts = {
   facebook: ['www.facebook.com'],
   instagram: ['www.facebook.com'],
   tiktok: ['www.tiktok.com'],
+  'tiktok-business': ['www.tiktok.com'],
   youtube: ['accounts.google.com'],
   linkedin: ['www.linkedin.com'],
 };

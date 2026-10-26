@@ -46,7 +46,8 @@ Operar Postiz en el Mac mini como plataforma de publicación de Koolbrand para v
 ### 3. Redes y aprobaciones
 
 - Inventariar por proveedor: app de desarrollador, propietario, estado de revisión, scopes aprobados, callbacks y quién puede conectarse.
-- TikTok: el OAuth directo de Bella ya tiene `video.publish` y responde a creator info, pero usa otra app/callback. Crear una demo que refleje un servicio activo para clientes; revisar el rechazo de la app TikTok que usa Postiz, solicitar solo los scopes necesarios y volver a revisión con vídeo sandbox y configuración de dominio/callback coherente. No pedir a Bella que vuelva a autorizar hasta que el callback y la app de Postiz estén listos.
+- TikTok: el OAuth directo de Bella ya tiene `video.publish` y responde a creator info, pero usa otra app/callback. No volver a enviar esa misma integración como plan principal. Evaluar primero el proveedor separado `tiktok-business` con credenciales de TikTok for Business; el OAuth oficial de Accounts API puede autorizar cuentas orgánicas, así que Bella podría entrar en el piloto. Confirmar permisos, callback, consentimiento y publicación con una cuenta externa antes de migrar.
+- Ruta integrada prioritaria: Postiz v2.24.0 añadió el tipo `tiktok-business`; v2.25.3 incluye `TIKTOK_BUSINESS_CLIENT_ID` / `TIKTOK_BUSINESS_CLIENT_SECRET`. El callback es `https://redes.koolbrand.com/integrations/social/tiktok-business/` (barra final). Usa TikTok API for Business y solicita `user.info.basic`, `user.info.username`, `user.info.stats`, `video.list`, `video.upload` y `video.publish`. TikTok describe Organic API para marcas, incluye a agencias como perfil objetivo y distingue Accounts API —autorización por cuenta orgánica— de Marketing API —autorización por anunciante—. Esto es distinto de la app Content Posting API de TikTok for Developers rechazada el 22-oct. Falta verificar que la app Business de Koolbrand tenga acceso a esas APIs/scopes y que autorice una cuenta cliente en el entorno real. Si TikTok no habilita el flujo, alternativa a evaluar: TikTok Marketing Partner con una API usable desde Postiz; usar un SaaS aparte sin sincronización no cumpliría el objetivo de centro único.
 - Revisar el uso compartido de la app Meta «Koolbrand» (publicación Postiz y Marketing API) antes de cambiar claves o apps: el mismo App ID sostiene servicios activos.
 - Tratar «cualquier cuenta» como «cualquier cuenta compatible con Postiz y con autorización/aprobación vigente del proveedor»; no prometer compatibilidad universal.
 
@@ -84,3 +85,10 @@ La documentación de Direct Post también dice que los clientes sin auditoría s
 - Postiz v2.25.3 `/auth/register`: https://github.com/gitroomhq/postiz-app/blob/v2.25.3/apps/backend/src/api/routes/auth.controller.ts
 - Postiz v2.25.3 `/enterprise/create-user`: https://github.com/gitroomhq/postiz-app/blob/v2.25.3/apps/backend/src/api/routes/enterprise.controller.ts
 - Postiz v2.25.3 implementación `createMaxUser`: https://github.com/gitroomhq/postiz-app/blob/v2.25.3/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
+- Postiz v2.24.0 release (incluye TikTok for Business): https://github.com/gitroomhq/postiz-app/releases/tag/v2.24.0
+- Postiz v2.25.3 provider TikTok Business: https://github.com/gitroomhq/postiz-app/blob/v2.25.3/libraries/nestjs-libraries/src/integrations/social/tiktok.business.provider.ts
+- Postiz v2.25.3 variables de entorno: https://github.com/gitroomhq/postiz-app/blob/v2.25.3/.env.example
+- TikTok for Business, autorización del anunciante: https://business-api.tiktok.com/gateway/docs/index?doc_id=1738373141733378
+- TikTok API for Business, visión general y perfiles admitidos (incluye agencias): https://business-api.tiktok.com/gateway/docs/index?doc_id=1735712062490625
+- TikTok API for Business, tabla de OAuth de Accounts API por cuenta orgánica: https://business-api.tiktok.com/gateway/docs/index?doc_id=1766037914914818
+- TikTok Direct Post, aprobación de `video.publish` y auditoría de publicación pública: https://developers.tiktok.com/docs/en/content-posting-api-get-started
