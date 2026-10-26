@@ -78,146 +78,6 @@ index fef89ef..728b4b9 100644
 +    };
 +  }
 +
-diff --git a/apps/backend/src/api/routes/users.controller.ts b/apps/backend/src/api/routes/users.controller.ts
-index fccade5..d6c549b 100644
---- a/apps/backend/src/api/routes/users.controller.ts
-+++ b/apps/backend/src/api/routes/users.controller.ts
-@@ -98 +98,3 @@ export class UsersController {
--      totalChannels: !process.env.STRIPE_PUBLISHABLE_KEY
-+      totalChannels: organization?.managedExternalId
-+        ? 30
-+        : !process.env.STRIPE_PUBLISHABLE_KEY
-@@ -102,0 +105,3 @@ export class UsersController {
-+        organization?.managedExternalId
-+          ? 'PRO'
-+          :
-@@ -119 +124 @@ export class UsersController {
--        organization?.users[0]?.role === 'SUPERADMIN' ||
-+        !organization?.managedExternalId &&
-@@ -121 +126,3 @@ export class UsersController {
--        organization?.users[0]?.role === 'ADMIN'
-+        (organization?.users[0]?.role === 'SUPERADMIN' ||
-+        // @ts-ignore
-+        organization?.users[0]?.role === 'ADMIN')
-@@ -247,0 +255,3 @@ export class UsersController {
-+    if (organization?.managedExternalId) {
-+      throw new HttpException('API keys for managed tenants are maintained by Koolbrand', 400);
-+    }
-diff --git a/apps/backend/src/services/auth/auth.service.ts b/apps/backend/src/services/auth/auth.service.ts
-index 89706de..8ecf9ec 100644
---- a/apps/backend/src/services/auth/auth.service.ts
-+++ b/apps/backend/src/services/auth/auth.service.ts
-@@ -23,4 +23 @@ export class AuthService {
--    if (
--      process.env.DISABLE_REGISTRATION !== 'true' ||
--      provider === Provider.GENERIC
--    ) {
-+    if (process.env.DISABLE_REGISTRATION !== 'true') {
-@@ -29,0 +27,7 @@ export class AuthService {
-+    // Generic/OIDC is a login provider, not a permanent exemption from a
-+    // closed self-hosted registration policy. Preserve the first-user
-+    // bootstrap behavior, then reject new OIDC identities after org creation.
-+    if (provider === Provider.GENERIC) {
-+      return (await this._organizationService.getCount()) === 0;
-+    }
-+
-diff --git a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
-index f70f71c..468a2a7 100644
---- a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
-+++ b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
-@@ -16,0 +17,69 @@ export class OrganizationRepository {
-+  async createManagedOrganization(
-+    externalId: string,
-+    name: string,
-+    operatorUserId: string
-+  ) {
-+    const operator = await this._user.model.user.findUnique({
-+      where: { id: operatorUserId },
-+      select: { id: true, isSuperAdmin: true, deletedAt: true },
-+    });
-+    if (!operator?.isSuperAdmin || operator.deletedAt) {
-+      throw new Error('Configured Postiz tenant operator is not an active superadmin');
-+    }
-+
-+    const existing = await this._organization.model.organization.findUnique({
-+      where: { managedExternalId: externalId },
-+      select: { id: true, name: true, apiKey: true },
-+    });
-+    if (existing) {
-+      if (existing.name !== name) {
-+        throw new Error('Managed external ID already belongs to a different organization name');
-+      }
-+      return existing;
-+    }
-+
-+    try {
-+      return await this._organization.model.organization.create({
-+        select: { id: true, name: true, apiKey: true },
-+        data: {
-+          name,
-+          managedExternalId: externalId,
-+          apiKey: AuthService.fixedEncryption(makeSecureId(32)),
-+          allowTrial: false,
-+          isTrailing: false,
-+          subscription: {
-+            create: {
-+              subscriptionTier: SubscriptionTier.PRO,
-+              totalChannels: 30,
-+              isLifetime: true,
-+              period: 'YEARLY',
-+              provider: 'self-hosted',
-+            },
-+          },
-+          users: {
-+            create: {
-+              role: Role.ADMIN,
-+              user: { connect: { id: operator.id } },
-+            },
-+          },
-+        },
-+      });
-+    } catch (error: any) {
-+      // A retry after a lost response, or concurrent requests with the same
-+      // external ID, must return the one organization already created.
-+      if (error?.code === 'P2002') {
-+        const created = await this._organization.model.organization.findUnique({
-+          where: { managedExternalId: externalId },
-+          select: { id: true, name: true, apiKey: true },
-+        });
-+        if (created) {
-+          if (created.name !== name) {
-+            throw new Error('Managed external ID already belongs to a different organization name');
-+          }
-+          return created;
-+        }
-+      }
-+      throw error;
-+    }
-+  }
-+
-diff --git a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
-index b14f5db..62919fb 100644
---- a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
-+++ b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
-@@ -32,0 +33,12 @@ export class OrganizationService {
-+  createManagedOrganization(
-+    externalId: string,
-+    name: string,
-+    operatorUserId: string
-+  ) {
-+    return this._organizationRepository.createManagedOrganization(
-+      externalId,
-+      name,
-+      operatorUserId
-+    );
-+  }
-+
-diff --git a/libraries/nestjs-libraries/src/database/prisma/schema.prisma b/libraries/nestjs-libraries/src/database/prisma/schema.prisma
-index 2fd85ec..ba9f536 100644
---- a/libraries/nestjs-libraries/src/database/prisma/schema.prisma
-+++ b/libraries/nestjs-libraries/src/database/prisma/schema.prisma
-@@ -13,0 +14 @@ model Organization {
-+  managedExternalId   String?              @unique
 diff --git a/apps/backend/src/api/routes/integrations.controller.ts b/apps/backend/src/api/routes/integrations.controller.ts
 index bfd1d8a..c293273 100644
 --- a/apps/backend/src/api/routes/integrations.controller.ts
@@ -286,6 +146,49 @@ index 0c0df0c..01b6669 100644
 @@ -116 +134 @@ export class NoAuthIntegrationsController {
 -            code: body.code,
 +            code: callbackCode,
+diff --git a/apps/backend/src/api/routes/users.controller.ts b/apps/backend/src/api/routes/users.controller.ts
+index fccade5..d6c549b 100644
+--- a/apps/backend/src/api/routes/users.controller.ts
++++ b/apps/backend/src/api/routes/users.controller.ts
+@@ -98 +98,3 @@ export class UsersController {
+-      totalChannels: !process.env.STRIPE_PUBLISHABLE_KEY
++      totalChannels: organization?.managedExternalId
++        ? 30
++        : !process.env.STRIPE_PUBLISHABLE_KEY
+@@ -102,0 +105,3 @@ export class UsersController {
++        organization?.managedExternalId
++          ? 'PRO'
++          :
+@@ -119 +124 @@ export class UsersController {
+-        organization?.users[0]?.role === 'SUPERADMIN' ||
++        !organization?.managedExternalId &&
+@@ -121 +126,3 @@ export class UsersController {
+-        organization?.users[0]?.role === 'ADMIN'
++        (organization?.users[0]?.role === 'SUPERADMIN' ||
++        // @ts-ignore
++        organization?.users[0]?.role === 'ADMIN')
+@@ -247,0 +255,3 @@ export class UsersController {
++    if (organization?.managedExternalId) {
++      throw new HttpException('API keys for managed tenants are maintained by Koolbrand', 400);
++    }
+diff --git a/apps/backend/src/services/auth/auth.service.ts b/apps/backend/src/services/auth/auth.service.ts
+index 89706de..8ecf9ec 100644
+--- a/apps/backend/src/services/auth/auth.service.ts
++++ b/apps/backend/src/services/auth/auth.service.ts
+@@ -23,4 +23 @@ export class AuthService {
+-    if (
+-      process.env.DISABLE_REGISTRATION !== 'true' ||
+-      provider === Provider.GENERIC
+-    ) {
++    if (process.env.DISABLE_REGISTRATION !== 'true') {
+@@ -29,0 +27,7 @@ export class AuthService {
++    // Generic/OIDC is a login provider, not a permanent exemption from a
++    // closed self-hosted registration policy. Preserve the first-user
++    // bootstrap behavior, then reject new OIDC identities after org creation.
++    if (provider === Provider.GENERIC) {
++      return (await this._organizationService.getCount()) === 0;
++    }
++
 diff --git a/apps/frontend/src/components/launches/continue.integration.tsx b/apps/frontend/src/components/launches/continue.integration.tsx
 index 8386cb4..223be7a 100644
 --- a/apps/frontend/src/components/launches/continue.integration.tsx
@@ -385,18 +288,18 @@ index 99bb9af..ebc7510 100644
 +      )}
 diff --git a/docs/postforme-quickstart-tiktok.md b/docs/postforme-quickstart-tiktok.md
 new file mode 100644
-index 0000000..b948681
+index 0000000..dfa2055
 --- /dev/null
 +++ b/docs/postforme-quickstart-tiktok.md
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,66 @@
 +# Post for Me Quickstart: TikTok vertical slice
 +
 +**Status: prototype, disabled by default. Not a complete or production-ready
 +Post for Me integration.** This adds a separate `tiktok-postforme` identifier
 +with an optional TikTok connection and asynchronous publish path while reusing
 +Postiz's existing TikTok composer and settings. It does not alter existing
-+native TikTok channels. No real OAuth,
-+account, spend, vendor contact, or deployment was performed.
++native TikTok channels. No real OAuth, account, spend, vendor contact, or
++deployment was performed.
 +
 +## Configuration and security boundary
 +
@@ -423,15 +326,21 @@ index 0000000..b948681
 +connection for the same organization is rejected while one is pending.
 +
 +Before publishing or polling, the backend re-fetches the account and verifies
-+its ID, TikTok platform, connected status and tenant `external_id`. Publishing
-+supplies a deterministic `external_id` for correlation; Post for Me documents
-+this as a linking identifier, not a request-deduplication guarantee. A retry
-+after an ambiguous timeout may therefore create a duplicate and needs a
-+separate idempotency design before production. The pending workflow queries
-+`/v1/social-post-results` and only completes when the single expected
-+account result reports `success: true` with an HTTPS URL and platform post ID;
-+explicit failure becomes a provider error and missing/incomplete results stay
-+pending.
++its ID, TikTok platform, connected status and tenant `external_id`. Each
++Postiz post/channel pair gets a deterministic, channel-scoped `external_id`.
++Before creating and while polling, the adapter queries
++`/v1/social-posts?external_id=` to recover an accepted request after an
++ambiguous timeout or malformed 2xx response. If it cannot yet find the post,
++the workflow stays pending rather than immediately submitting again. The
++pending workflow queries `/v1/social-post-results` and only completes when the
++single expected account result reports `success: true` with an HTTPS URL and
++platform post ID; explicit failure becomes a provider error and missing or
++incomplete results stay pending.
++
++Post for Me documents `external_id` as a linking identifier, not a request
++deduplication guarantee. The lookup reduces duplicate risk but cannot fully
++prevent duplicates if list results are eventually consistent or concurrent
++create requests race; resolve those cases before production.
 +
 +## Unsupported and unverified behavior
 +
@@ -445,10 +354,107 @@ index 0000000..b948681
 +  the exact Post for Me Quickstart TikTok field/value contract before enabling
 +  the feature for a real organization.
 +- A Post for Me project, API key, dashboard callback configuration and
-+  non-production end-to-end verification are still required. No tests were run
-+  as requested. Keep the feature flag off until the code receives review and
++  non-production end-to-end verification are still required. Tests/build were
++  not run. Keep the feature flag off until the code receives review and
 +  the callback/publish/results flow is verified against a non-production
 +  project.
+diff --git a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
+index f70f71c..468a2a7 100644
+--- a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
++++ b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
+@@ -16,0 +17,69 @@ export class OrganizationRepository {
++  async createManagedOrganization(
++    externalId: string,
++    name: string,
++    operatorUserId: string
++  ) {
++    const operator = await this._user.model.user.findUnique({
++      where: { id: operatorUserId },
++      select: { id: true, isSuperAdmin: true, deletedAt: true },
++    });
++    if (!operator?.isSuperAdmin || operator.deletedAt) {
++      throw new Error('Configured Postiz tenant operator is not an active superadmin');
++    }
++
++    const existing = await this._organization.model.organization.findUnique({
++      where: { managedExternalId: externalId },
++      select: { id: true, name: true, apiKey: true },
++    });
++    if (existing) {
++      if (existing.name !== name) {
++        throw new Error('Managed external ID already belongs to a different organization name');
++      }
++      return existing;
++    }
++
++    try {
++      return await this._organization.model.organization.create({
++        select: { id: true, name: true, apiKey: true },
++        data: {
++          name,
++          managedExternalId: externalId,
++          apiKey: AuthService.fixedEncryption(makeSecureId(32)),
++          allowTrial: false,
++          isTrailing: false,
++          subscription: {
++            create: {
++              subscriptionTier: SubscriptionTier.PRO,
++              totalChannels: 30,
++              isLifetime: true,
++              period: 'YEARLY',
++              provider: 'self-hosted',
++            },
++          },
++          users: {
++            create: {
++              role: Role.ADMIN,
++              user: { connect: { id: operator.id } },
++            },
++          },
++        },
++      });
++    } catch (error: any) {
++      // A retry after a lost response, or concurrent requests with the same
++      // external ID, must return the one organization already created.
++      if (error?.code === 'P2002') {
++        const created = await this._organization.model.organization.findUnique({
++          where: { managedExternalId: externalId },
++          select: { id: true, name: true, apiKey: true },
++        });
++        if (created) {
++          if (created.name !== name) {
++            throw new Error('Managed external ID already belongs to a different organization name');
++          }
++          return created;
++        }
++      }
++      throw error;
++    }
++  }
++
+diff --git a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
+index b14f5db..62919fb 100644
+--- a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
++++ b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
+@@ -32,0 +33,12 @@ export class OrganizationService {
++  createManagedOrganization(
++    externalId: string,
++    name: string,
++    operatorUserId: string
++  ) {
++    return this._organizationRepository.createManagedOrganization(
++      externalId,
++      name,
++      operatorUserId
++    );
++  }
++
+diff --git a/libraries/nestjs-libraries/src/database/prisma/schema.prisma b/libraries/nestjs-libraries/src/database/prisma/schema.prisma
+index 2fd85ec..ba9f536 100644
+--- a/libraries/nestjs-libraries/src/database/prisma/schema.prisma
++++ b/libraries/nestjs-libraries/src/database/prisma/schema.prisma
+@@ -13,0 +14 @@ model Organization {
++  managedExternalId   String?              @unique
 diff --git a/libraries/nestjs-libraries/src/dtos/integrations/connect.integration.dto.ts b/libraries/nestjs-libraries/src/dtos/integrations/connect.integration.dto.ts
 index a74bfb5..af73a0f 100644
 --- a/libraries/nestjs-libraries/src/dtos/integrations/connect.integration.dto.ts
@@ -516,12 +522,12 @@ index 261b84e..ce7d750 100644
 +    code: string;
 +  }>;
 diff --git a/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts b/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
-index 960663b..6f8e4a7 100644
+index 960663b..cba74cd 100644
 --- a/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
 +++ b/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
 @@ -24,0 +25 @@ import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorato
 +import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-@@ -53,0 +55,107 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -53,0 +55,126 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +  private postForMeEnabled() {
 +    return (
 +      this.identifier === 'tiktok-postforme' &&
@@ -545,7 +551,11 @@ index 960663b..6f8e4a7 100644
 +    });
 +    const body = await response.json().catch(() => ({}));
 +    if (!response.ok) {
-+      throw new Error(`Post for Me request failed (${response.status})`);
++      const error: any = new Error(
++        `Post for Me request failed (${response.status})`
++      );
++      error.status = response.status;
++      throw error;
 +    }
 +    return body;
 +  }
@@ -555,6 +565,21 @@ index 960663b..6f8e4a7 100644
 +      `/v1/social-accounts/${encodeURIComponent(accountId)}`
 +    );
 +    return response?.data ?? response;
++  }
++
++  private async postForMePostByExternalId(externalId: string) {
++    const response = await this.postForMeRequest(
++      `/v1/social-posts?external_id=${encodeURIComponent(externalId)}`
++    );
++    const posts = response?.data ?? response;
++    if (!Array.isArray(posts)) {
++      throw new Error('Post for Me returned an invalid social posts response');
++    }
++    const matches = posts.filter((post) => post?.external_id === externalId);
++    if (matches.length > 1) {
++      throw new Error('Post for Me returned duplicate external post IDs');
++    }
++    return matches[0] ?? null;
 +  }
 +
 +  private async verifyPostForMeAccount(
@@ -629,11 +654,11 @@ index 960663b..6f8e4a7 100644
 +    return { state, code: account.id };
 +  }
 +
-@@ -296,0 +405,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -296,0 +424,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (refreshToken.startsWith('postforme:')) {
 +      throw new Error('Post for Me TikTok account refresh is not supported');
 +    }
-@@ -341 +452,55 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -341 +471,55 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 -  async generateAuthUrl() {
 +  async generateAuthUrl(_clientInformation?: any, organizationId?: string) {
 +    if (this.identifier === 'tiktok-postforme') {
@@ -690,7 +715,7 @@ index 960663b..6f8e4a7 100644
 +      return { url, codeVerifier: `postforme:${state}`, state };
 +    }
 +
-@@ -367,0 +533,22 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -367,0 +552,22 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (
 +      this.identifier === 'tiktok-postforme' &&
 +      !params.codeVerifier.startsWith('postforme:')
@@ -713,7 +738,7 @@ index 960663b..6f8e4a7 100644
 +      };
 +    }
 +
-@@ -447 +634,7 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -447 +653,9 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 -    pendingData: { publishId: string },
 +    pendingData: {
 +      publishId?: string;
@@ -721,8 +746,10 @@ index 960663b..6f8e4a7 100644
 +      postId?: string;
 +      accountId?: string;
 +      organizationId?: string;
++      externalId?: string;
++      postKey?: string;
 +    },
-@@ -449,0 +643,81 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -449,0 +664,96 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (
 +      this.identifier === 'tiktok-postforme' &&
 +      !accessToken.startsWith('postforme:')
@@ -735,14 +762,29 @@ index 960663b..6f8e4a7 100644
 +        pendingData?.kind !== 'postforme' ||
 +        pendingData.accountId !== accountId ||
 +        pendingData.organizationId !== integration.organizationId ||
-+        !pendingData.postId
++        !pendingData.externalId ||
++        pendingData.externalId !==
++          `postiz:${integration.organizationId}:${integration.id}:${pendingData.postKey}`
 +      ) {
 +        throw new Error('Invalid Post for Me pending state');
 +      }
 +      await this.verifyPostForMeAccount(accountId, integration.organizationId);
++      const post = pendingData.postId
++        ? undefined
++        : await this.postForMePostByExternalId(pendingData.externalId);
++      if (!pendingData.postId && !post) {
++        return { status: 'pending', pendingData };
++      }
++      const postId = pendingData.postId || post?.id;
++      if (
++        typeof postId !== 'string' ||
++        (post?.external_id && post.external_id !== pendingData.externalId)
++      ) {
++        throw new Error('Post for Me post does not match the pending request');
++      }
 +      const response = await this.postForMeRequest(
 +        `/v1/social-post-results?post_id=${encodeURIComponent(
-+          pendingData.postId
++          postId
 +        )}&limit=2`
 +      );
 +      const results = response?.data ?? response;
@@ -755,7 +797,7 @@ index 960663b..6f8e4a7 100644
 +      if (
 +        results.length !== 1 ||
 +        results[0]?.social_account_id !== accountId ||
-+        results[0]?.post_id !== pendingData.postId
++        results[0]?.post_id !== postId
 +      ) {
 +        throw new Error(
 +          'Post for Me results do not match the connected TikTok account'
@@ -804,13 +846,14 @@ index 960663b..6f8e4a7 100644
 +      };
 +    }
 +
-@@ -858,0 +1133,79 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -858,0 +1169,134 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      if (!this.postForMeEnabled()) {
 +        throw new Error('Post for Me TikTok adapter is disabled or unconfigured');
 +      }
 +      const accountId = accessToken.slice('postforme:'.length);
 +      await this.verifyPostForMeAccount(accountId, integration.organizationId);
++      const externalId = `postiz:${integration.organizationId}:${integration.id}:${firstPost.id}`;
 +      const media = (firstPost?.media || []).map((item) => {
 +        let parsed: URL;
 +        try {
@@ -837,34 +880,86 @@ index 960663b..6f8e4a7 100644
 +      if (!mappedPrivacyStatus) {
 +        throw new Error('TikTok privacy setting is missing or unsupported');
 +      }
-+      const created = await this.postForMeRequest('/v1/social-posts', {
-+        method: 'POST',
-+        body: JSON.stringify({
-+          external_id: `postiz:${integration.organizationId}:${firstPost.id}`,
-+          caption: firstPost.message || '',
-+          media,
-+          social_accounts: [accountId],
-+          platform_configurations: {
-+            tiktok: {
-+              title: settings.title,
-+              privacy_status: mappedPrivacyStatus,
-+              allow_comment: settings.comment,
-+              allow_duet: settings.duet,
-+              allow_stitch: settings.stitch,
-+              is_ai_generated: settings.video_made_with_ai,
-+              disclose_branded_content: settings.brand_content_toggle,
-+              disclose_your_brand: settings.brand_organic_toggle,
-+              auto_add_music: settings.autoAddMusic === 'yes',
++      let post = await this.postForMePostByExternalId(externalId);
++      if (!post) {
++        try {
++          const created = await this.postForMeRequest('/v1/social-posts', {
++            method: 'POST',
++            body: JSON.stringify({
++              external_id: externalId,
++              caption: firstPost.message || '',
++              media,
++              social_accounts: [accountId],
++              platform_configurations: {
++                tiktok: {
++                  title: settings.title,
++                  privacy_status: mappedPrivacyStatus,
++                  allow_comment: settings.comment,
++                  allow_duet: settings.duet,
++                  allow_stitch: settings.stitch,
++                  is_ai_generated: settings.video_made_with_ai,
++                  disclose_branded_content: settings.brand_content_toggle,
++                  disclose_your_brand: settings.brand_organic_toggle,
++                  auto_add_music: settings.autoAddMusic === 'yes',
++                },
++              },
++            }),
++          });
++          post = created?.data ?? created;
++        } catch (error: any) {
++          const status = Number(error?.status);
++          const definitelyRejected =
++            status >= 400 &&
++            status < 500 &&
++            ![408, 409, 425, 429].includes(status);
++          if (definitelyRejected) {
++            throw error;
++          }
++          // A timeout or server error may happen after Post for Me accepted the
++          // post. Reconcile by external_id and never immediately submit again.
++          try {
++            post = await this.postForMePostByExternalId(externalId);
++          } catch {
++            post = null;
++          }
++          if (!post) {
++            return [
++              {
++                id: firstPost.id,
++                postId: externalId,
++                releaseURL: '',
++                status: 'pending',
++                pendingData: {
++                  kind: 'postforme',
++                  externalId,
++                  postKey: firstPost.id,
++                  accountId,
++                  organizationId: integration.organizationId,
++                },
++              },
++            ];
++          }
++        }
++      }
++      if (typeof post?.id !== 'string') {
++        // A malformed 2xx response may still mean the provider accepted the
++        // post. Keep the workflow pending so it reconciles by external_id
++        // instead of blindly issuing another create request.
++        return [
++          {
++            id: firstPost.id,
++            postId: externalId,
++            releaseURL: '',
++            status: 'pending',
++            pendingData: {
++              kind: 'postforme',
++              externalId,
++              postKey: firstPost.id,
++              accountId,
++              organizationId: integration.organizationId,
 +            },
 +          },
-+        }),
-+      });
-+      const post = created?.data ?? created;
-+      if (
-+        typeof post?.id !== 'string' ||
-+        !['processing', 'processed'].includes(post?.status)
-+      ) {
-+        throw new Error('Post for Me did not accept the TikTok post');
++        ];
 +      }
 +      return [
 +        {
@@ -875,6 +970,8 @@ index 960663b..6f8e4a7 100644
 +          pendingData: {
 +            kind: 'postforme',
 +            postId: post.id,
++            externalId,
++            postKey: firstPost.id,
 +            accountId,
 +            organizationId: integration.organizationId,
 +          },
@@ -884,23 +981,23 @@ index 960663b..6f8e4a7 100644
 +    if (this.identifier === 'tiktok-postforme') {
 +      throw new Error('Invalid Post for Me TikTok account reference');
 +    }
-@@ -987,0 +1341,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -987,0 +1432,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('TikTok analytics are not supported by the Post for Me adapter');
 +    }
-@@ -1127,0 +1484,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1127,0 +1575,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('Post for Me media reconciliation is not supported');
 +    }
-@@ -1217,0 +1577,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1217,0 +1668,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('Post for Me release URL lookup requires account-scoped results');
 +    }
-@@ -1247,0 +1610,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1247,0 +1701,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('TikTok post analytics are not supported by the Post for Me adapter');
 +    }
-@@ -1315,0 +1681,6 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1315,0 +1772,6 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +
 +/** Separate provider identity keeps existing native TikTok channels intact. */
 +export class PostForMeTiktokProvider extends TiktokProvider {
