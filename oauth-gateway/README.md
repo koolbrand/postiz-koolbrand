@@ -24,7 +24,7 @@ Variables requeridas:
 - `PUBLIC_BASE_URL` (URL HTTPS pública de esta pasarela)
 - `TENANTS_FILE` (por defecto `/run/secrets/postiz-oauth-tenants.json`)
 - `LINK_TTL_SECONDS` (60–1800, por defecto 600)
-- `POSTIZ_TENANT_PROVIDERS` (lista separada por comas de `facebook`, `instagram`, `tiktok`, `tiktok-business`, `youtube` o `linkedin` al dar de alta una organización)
+- `POSTIZ_TENANT_PROVIDERS` (lista separada por comas de `facebook`, `instagram`, `tiktok`, `tiktok-business`, `youtube`, `linkedin`, `x`, `threads`, `pinterest` o `reddit` al dar de alta una organización). Cada OAuth requiere que su app y credenciales estén configuradas en Postiz; esta allowlist no crea ni aprueba esas apps.
 
 El CLI toma un bloqueo local al actualizar el registro para evitar que dos altas simultáneas pierdan entradas. Si el proceso se interrumpe antes de retirar el bloqueo, confirma que no siga ejecutándose y elimina manualmente el directorio `postiz-oauth-tenants.json.lock` antes de reintentar.
 
@@ -55,7 +55,7 @@ Define `POSTIZ_TENANTS_HOST_FILE` en el entorno protegido de Compose con la ruta
 }
 ```
 
-La lista de hosts debe revisarse por proveedor y actualizarse solo con dominios OAuth oficiales. No se deben usar claves API de producción en una instalación de staging. La clave Postiz da acceso a la API pública de su organización y nunca se devuelve al navegador.
+La pasarela permite Facebook/Instagram, TikTok, TikTok for Business, YouTube, LinkedIn, X, Threads, Pinterest y Reddit; los dominios autorizados se fijan por proveedor a los usados por Postiz v2.25.3. La lista de hosts debe revisarse por proveedor y actualizarse solo con dominios OAuth oficiales. No se deben usar claves API de producción en una instalación de staging. La clave Postiz da acceso a la API pública de su organización y nunca se devuelve al navegador.
 
 ## Endpoints
 

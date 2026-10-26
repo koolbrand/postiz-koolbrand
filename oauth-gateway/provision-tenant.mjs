@@ -16,13 +16,17 @@ const oauthHosts = {
   'tiktok-business': ['www.tiktok.com'],
   youtube: ['accounts.google.com'],
   linkedin: ['www.linkedin.com'],
+  x: ['api.twitter.com'],
+  threads: ['www.threads.net'],
+  pinterest: ['www.pinterest.com'],
+  reddit: ['www.reddit.com'],
 };
 
 if (!externalId || !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(externalId) ||
     name.length < 3 || name.length > 128 ||
     actorIndex < 0 || !/^[^\s@]+@koolbrand\.com$/i.test(actor) ||
     providerList.some(provider => !Object.hasOwn(oauthHosts, provider))) {
-  console.error('Uso: POSTIZ_TENANT_PROVIDERS=facebook,instagram node provision-tenant.mjs <id-cliente> <nombre> --actor <email-koolbrand>');
+  console.error('Uso: POSTIZ_TENANT_PROVIDERS=<lista> node provision-tenant.mjs <id-cliente> <nombre> --actor <email-koolbrand>');
   process.exit(2);
 }
 
