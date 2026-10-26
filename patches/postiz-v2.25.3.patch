@@ -181,14 +181,11 @@ index 89706de..8ecf9ec 100644
 -      provider === Provider.GENERIC
 -    ) {
 +    if (process.env.DISABLE_REGISTRATION !== 'true') {
-@@ -29,0 +27,7 @@ export class AuthService {
-+    // Generic/OIDC is a login provider, not a permanent exemption from a
-+    // closed self-hosted registration policy. Preserve the first-user
-+    // bootstrap behavior, then reject new OIDC identities after org creation.
-+    if (provider === Provider.GENERIC) {
-+      return (await this._organizationService.getCount()) === 0;
-+    }
-+
+@@ -29 +26,3 @@ export class AuthService {
+-    return (await this._organizationService.getCount()) === 0;
++    // Existing provider identities are returned before this check.
++    // Closed registration must not let OAuth create a new organization.
++    return false;
 diff --git a/apps/frontend/src/components/launches/continue.integration.tsx b/apps/frontend/src/components/launches/continue.integration.tsx
 index 8386cb4..223be7a 100644
 --- a/apps/frontend/src/components/launches/continue.integration.tsx
