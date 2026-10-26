@@ -56,4 +56,3 @@ La aprobación de una app de plataforma y sus permisos no la sustituye Postiz. T
 - Una publicación de prueba en borrador no sale; una programada solo sale tras la autorización prevista y deja evidencia.
 - Reconectar, revocar, rotar claves, respaldar y restaurar están documentados.
 - El dashboard informa datos disponibles y ausentes por API, no promedia periodos incompatibles y muestra la fecha de sincronización.
-
