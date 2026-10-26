@@ -29,6 +29,7 @@ RUN git apply --unidiff-zero --check /tmp/postiz-koolbrand.patch \
 COPY marca/ /kb-marca/
 RUN cp /app/var/docker/nginx.conf /etc/nginx/nginx.conf \
     && sed -i 's/^user[[:space:]]\+www;/user www-data;/' /etc/nginx/nginx.conf
+RUN sh /kb-marca/idioma-es.sh
 RUN pnpm install
 RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
 
@@ -68,8 +69,7 @@ RUN set -eu; \
     echo "Capa de marca v=$V aplicada a $(echo "$CSS" | wc -l) CSS"; \
     for n in $(find / -path /proc -prune -o -type d -name .next -print 2>/dev/null | grep -v node_modules); do sh /kb-marca/recolorear.sh "$n"; done; \
     for p in $PUB; do sh /kb-marca/recolorear.sh "$(dirname "$p")"; done; \
-    sh /kb-marca/linkedin-perfil.sh; \
-    sh /kb-marca/idioma-es.sh
+    sh /kb-marca/linkedin-perfil.sh
 
 LABEL org.opencontainers.image.source="https://github.com/koolbrand/postiz-koolbrand" \
       org.opencontainers.image.description="Postiz source build con aislamiento multi-cliente y marca Koolbrand" \
