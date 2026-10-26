@@ -303,7 +303,7 @@ new file mode 100644
 index 0000000..dfa2055
 --- /dev/null
 +++ b/docs/postforme-quickstart-tiktok.md
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,70 @@
 +# Post for Me Quickstart: TikTok vertical slice
 +
 +**Status: prototype, disabled by default. Not a complete or production-ready
@@ -362,6 +362,8 @@ index 0000000..dfa2055
 +  calls Post for Me's account disconnect endpoint, revoking active tokens but
 +  retaining the provider-side account history. If remote revocation fails,
 +  Postiz keeps the channel so an operator can retry safely.
++  Keep the feature flag and API key configured until all attached channels
++  have been disconnected; disabling the adapter first blocks deletion.
 +- The adapter accepts one TikTok account per Postiz channel. It does not
 +  partially connect or publish across the callback's multiple-account result.
 +- TikTok settings are mapped from Postiz's existing TikTok settings. Confirm
