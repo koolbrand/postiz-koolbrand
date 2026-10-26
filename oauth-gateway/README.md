@@ -63,11 +63,11 @@ La pasarela permite Facebook/Instagram, TikTok, TikTok for Business, YouTube, Li
 - `GET /authorize#<token>`: página de consentimiento, sin consumir el enlace.
 - `POST /v1/preview` y `POST /v1/authorize`: llamadas de la propia página. La segunda consume el token y redirige al OAuth del proveedor.
 
-El alta se ejecuta en el Mac mini con Node 22. El endpoint Postiz `POST /api/enterprise/managed-tenants` exige HMAC-SHA256, nonce de un uso en Redis, marca temporal, un operador Postiz global configurado y un ID externo único; no devuelve datos al navegador. El CLI registra el operador **declarado** en el comando —no demuestra criptográficamente su identidad— y el resultado, nunca la clave:
+El alta se ejecuta en el Mac mini con Node 22. El endpoint Postiz `POST /api/enterprise/managed-tenants` exige HMAC-SHA256, nonce de un uso en Redis, marca temporal, un operador Postiz global configurado y un ID externo único; no devuelve datos al navegador. El CLI no acepta un nombre de operador como argumento: registra el usuario y UID del proceso obtenidos del sistema operativo, y rechaza UID root o distinto entre usuario real y efectivo. Esto evita atribuciones arbitrarias mediante `--actor`; el registro identifica la cuenta local, no prueba por sí solo qué persona estaba frente al Mac mini. La custodia del secreto del provisionador sigue siendo el control de acceso. El emisor de enlaces OAuth corre dentro del contenedor y registra el UID/usuario de servicio del proceso, no la identidad de la persona que ejecutó `docker exec`:
 
 ```sh
-TENANTS_FILE="$HOME/.koolbrand/postiz-oauth-tenants.json" POSTIZ_TENANT_PROVIDERS=facebook,instagram node provision-tenant.mjs bella "Bella Valenti" --actor adrian@koolbrand.com
-docker exec postiz-oauth-gateway node /app/issue-link.mjs bella instagram --actor adrian@koolbrand.com
+TENANTS_FILE="$HOME/.koolbrand/postiz-oauth-tenants.json" POSTIZ_TENANT_PROVIDERS=facebook,instagram node provision-tenant.mjs bella "Bella Valenti"
+docker exec postiz-oauth-gateway node /app/issue-link.mjs bella instagram
 ```
 
 El CLI imprime el enlace al final; compártelo con el cliente por el canal acordado y no lo pegues en tickets públicos. El proxy debe forzar HTTPS, no registrar cuerpos ni fragmentos y aplicar límites de frecuencia a los endpoints públicos. No configurar CORS. Mantener Redis y el puerto de la pasarela en una red privada; publicar solo por el proxy TLS.
