@@ -12,7 +12,7 @@ La imagen base se fija en `POSTIZ_VERSION`; el flujo de actualización y el dest
 
 ## Producción actual
 
-Verificado el 26-oct-2026: `redes.koolbrand.com` corre en el Mac mini, con Colima, desde `~/servicios/postiz/compose.yml`. La imagen activa es `ghcr.io/koolbrand/postiz-koolbrand:v2.25.1-kb`; el registro público está deshabilitado. El runtime tiene seis contenedores activos y copias del compose.
+Verificado el 26-oct-2026: `redes.koolbrand.com` corre en el Mac mini, con Colima, desde `~/servicios/postiz/compose.yml`. La imagen activa es `ghcr.io/koolbrand/postiz-koolbrand:v2.25.1-kb`; el entorno tenía `DISABLE_REGISTRATION=true`. En v2.25.3 el alta OIDC `GENERIC` puede quedar exceptuada de esa variable; la configuración de proveedores de producción no se ha podido verificar, así que el cierre completo del registro sigue pendiente de comprobación. El runtime tiene seis contenedores activos y copias del compose.
 
 Este repositorio solo construye la imagen con la capa de marca; no contiene la aplicación Postiz ni el compose de producción. **Las referencias históricas a Coolify que queden en automatizaciones no describen el destino activo. No desplegar con esas instrucciones.** El procedimiento de actualización/rollback del Mac mini está pendiente de documentar.
 
