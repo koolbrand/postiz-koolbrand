@@ -22,6 +22,9 @@ RUN test -n "${POSTIZ_UPSTREAM_COMMIT}" \
     && git config --global url."https://github.com/".insteadOf "git@github.com:" \
     && git submodule update --init --depth 1
 
+# Descarga el store desde el lockfile upstream, cacheable aunque cambie el patch Koolbrand.
+RUN pnpm fetch
+
 COPY patches/postiz-v2.25.3.patch /tmp/postiz-koolbrand.patch
 RUN git apply --unidiff-zero --check /tmp/postiz-koolbrand.patch \
     && git apply --unidiff-zero /tmp/postiz-koolbrand.patch
@@ -30,7 +33,8 @@ COPY marca/ /kb-marca/
 RUN cp /app/var/docker/nginx.conf /etc/nginx/nginx.conf \
     && sed -i 's/^user[[:space:]]\+www;/user www-data;/' /etc/nginx/nginx.conf
 RUN sh /kb-marca/idioma-es.sh
-RUN pnpm install
+# El postinstall genera Prisma Client; ejecutarlo después del patch para incluir su schema.
+RUN pnpm install --offline
 RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
 
 # 1) CSS: cada CSS compilado de Next (static/css hasta v2.10, static/chunks con Turbopack desde v2.2x) importa al principio Google Fonts y nuestra capa
