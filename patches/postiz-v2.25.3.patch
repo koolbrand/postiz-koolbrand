@@ -92,6 +92,21 @@ index bfd1d8a..c293273 100644
 @@ -259 +265 @@ export class IntegrationsController {
 -        await integrationProvider.generateAuthUrl(getExternalUrl);
 +        await integrationProvider.generateAuthUrl(getExternalUrl, org.id);
+@@ -419,6 +426,14 @@ export class IntegrationsController {
+   @Delete('/')
+   async deleteChannel(
+     @GetOrgFromRequest() org: Organization,
+     @Body('id') id: string
+   ) {
++    const channel = await this._integrationService.getIntegrationById(org.id, id);
++    if (!channel) {
++      throw new Error('Invalid integration');
++    }
++    const provider = this._integrationManager.getSocialIntegration(
++      channel.providerIdentifier
++    );
++    await provider.disconnectAccount?.(channel);
+     const isTherePosts = await this._integrationService.getPostsForChannel(
 diff --git a/apps/backend/src/api/routes/no.auth.integrations.controller.ts b/apps/backend/src/api/routes/no.auth.integrations.controller.ts
 index 0c0df0c..01b6669 100644
 --- a/apps/backend/src/api/routes/no.auth.integrations.controller.ts
@@ -288,7 +303,7 @@ new file mode 100644
 index 0000000..dfa2055
 --- /dev/null
 +++ b/docs/postforme-quickstart-tiktok.md
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,68 @@
 +# Post for Me Quickstart: TikTok vertical slice
 +
 +**Status: prototype, disabled by default. Not a complete or production-ready
@@ -341,10 +356,12 @@ index 0000000..dfa2055
 +
 +## Unsupported and unverified behavior
 +
-+- Analytics, media reconciliation, refresh/reconnect and vendor-side account
-+  deletion are not implemented. Analytics/reconciliation calls fail closed for
-+  these opaque account references; removing a channel in Postiz does not revoke
-+  its account in Post for Me.
++- Analytics, media reconciliation and refresh/reconnect are not implemented.
++  Analytics/reconciliation calls fail closed for these opaque account
++  references. Deleting a Postiz channel first
++  calls Post for Me's account disconnect endpoint, revoking active tokens but
++  retaining the provider-side account history. If remote revocation fails,
++  Postiz keeps the channel so an operator can retry safely.
 +- The adapter accepts one TikTok account per Postiz channel. It does not
 +  partially connect or publish across the callback's multiple-account result.
 +- TikTok settings are mapped from Postiz's existing TikTok settings. Confirm
@@ -511,20 +528,22 @@ index 261b84e..ce7d750 100644
 -    clientInformation?: ClientInformation
 +    clientInformation?: ClientInformation,
 +    organizationId?: string
-@@ -25,0 +27,6 @@ export interface IAuthenticator {
+@@ -25,0 +27,8 @@ export interface IAuthenticator {
 +  /** Resolve providers whose callback cannot carry OAuth state. Implementations
 +   * must validate callback data server-side and return a one-use state only. */
 +  resolveOAuthCallback?(callback: Record<string, any>): Promise<{
 +    state: string;
 +    code: string;
 +  }>;
++  /** Revoke provider-side access before Postiz removes the channel record. */
++  disconnectAccount?(integration: Integration): Promise<void>;
 diff --git a/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts b/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
 index 960663b..cba74cd 100644
 --- a/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
 +++ b/libraries/nestjs-libraries/src/integrations/social/tiktok.provider.ts
 @@ -24,0 +25 @@ import { Rules } from '@gitroom/nestjs-libraries/chat/rules.description.decorato
 +import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-@@ -53,0 +55,126 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -53,0 +55,148 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +  private postForMeEnabled() {
 +    return (
 +      this.identifier === 'tiktok-postforme' &&
@@ -562,6 +581,27 @@ index 960663b..cba74cd 100644
 +      `/v1/social-accounts/${encodeURIComponent(accountId)}`
 +    );
 +    return response?.data ?? response;
++  }
++
++  async disconnectAccount(integration: Integration) {
++    if (!integration.token.startsWith('postforme:')) return;
++    const accountId = integration.token.slice('postforme:'.length);
++    const account = await this.postForMeAccount(accountId);
++    if (
++      account?.id !== accountId ||
++      account?.platform !== 'tiktok' ||
++      account?.external_id !== integration.organizationId
++    ) {
++      throw new Error('Post for Me account does not belong to this organization');
++    }
++    if (account.status === 'disconnected') return;
++    if (account.status !== 'connected') {
++      throw new Error('Post for Me account status cannot be safely disconnected');
++    }
++    await this.postForMeRequest(
++      `/v1/social-accounts/${encodeURIComponent(accountId)}/disconnect`,
++      { method: 'POST', body: '{}' }
++    );
 +  }
 +
 +  private async postForMePostByExternalId(externalId: string) {
@@ -651,11 +691,11 @@ index 960663b..cba74cd 100644
 +    return { state, code: account.id };
 +  }
 +
-@@ -296,0 +424,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -296,0 +446,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (refreshToken.startsWith('postforme:')) {
 +      throw new Error('Post for Me TikTok account refresh is not supported');
 +    }
-@@ -341 +471,55 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -341 +493,55 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 -  async generateAuthUrl() {
 +  async generateAuthUrl(_clientInformation?: any, organizationId?: string) {
 +    if (this.identifier === 'tiktok-postforme') {
@@ -712,7 +752,7 @@ index 960663b..cba74cd 100644
 +      return { url, codeVerifier: `postforme:${state}`, state };
 +    }
 +
-@@ -367,0 +552,22 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -367,0 +574,22 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (
 +      this.identifier === 'tiktok-postforme' &&
 +      !params.codeVerifier.startsWith('postforme:')
@@ -735,7 +775,7 @@ index 960663b..cba74cd 100644
 +      };
 +    }
 +
-@@ -447 +653,9 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -447 +675,9 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 -    pendingData: { publishId: string },
 +    pendingData: {
 +      publishId?: string;
@@ -746,7 +786,7 @@ index 960663b..cba74cd 100644
 +      externalId?: string;
 +      postKey?: string;
 +    },
-@@ -449,0 +664,96 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -449,0 +686,96 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (
 +      this.identifier === 'tiktok-postforme' &&
 +      !accessToken.startsWith('postforme:')
@@ -843,7 +883,7 @@ index 960663b..cba74cd 100644
 +      };
 +    }
 +
-@@ -858,0 +1169,134 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -858,0 +1191,134 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      if (!this.postForMeEnabled()) {
 +        throw new Error('Post for Me TikTok adapter is disabled or unconfigured');
@@ -978,23 +1018,23 @@ index 960663b..cba74cd 100644
 +    if (this.identifier === 'tiktok-postforme') {
 +      throw new Error('Invalid Post for Me TikTok account reference');
 +    }
-@@ -987,0 +1432,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -987,0 +1454,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('TikTok analytics are not supported by the Post for Me adapter');
 +    }
-@@ -1127,0 +1575,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1127,0 +1597,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('Post for Me media reconciliation is not supported');
 +    }
-@@ -1217,0 +1668,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1217,0 +1690,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('Post for Me release URL lookup requires account-scoped results');
 +    }
-@@ -1247,0 +1701,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1247,0 +1723,3 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +    if (accessToken.startsWith('postforme:')) {
 +      throw new Error('TikTok post analytics are not supported by the Post for Me adapter');
 +    }
-@@ -1315,0 +1772,6 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
+@@ -1315,0 +1794,6 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 +
 +/** Separate provider identity keeps existing native TikTok channels intact. */
 +export class PostForMeTiktokProvider extends TiktokProvider {
