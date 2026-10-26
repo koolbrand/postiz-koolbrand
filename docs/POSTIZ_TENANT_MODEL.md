@@ -12,12 +12,15 @@
 
 ## Flujo de conexión
 
-1. Operador Koolbrand identifica cliente, red y organización ya provisionada.
-2. La pasarela emite un enlace de un solo uso, limitado a ese cliente y proveedor, que caduca en 10 minutos.
-3. El cliente revisa el nombre del cliente y la red y pulsa continuar.
-4. La pasarela llama a la API pública de Postiz con la clave interna de esa organización y valida el destino OAuth antes de entregar la navegación.
-5. El cliente inicia sesión directamente en la plataforma y acepta los permisos mostrados.
-6. Se comprueba que el canal recién conectado aparece solo en la organización esperada, y se registra proveedor, fecha y resultado sin guardar tokens de OAuth en logs.
+1. Operador Koolbrand ejecuta en el Mac mini el CLI de alta con el ID estable del cliente, el nombre y las redes autorizadas. El CLI firma una solicitud HMAC con marca temporal y nonce; Postiz valida que el operador configurado siga siendo SUPERADMIN.
+2. Postiz crea una sola organización por ID externo, idempotente, con cuota PRO de 30 canales y una membresía ADMIN del operador Koolbrand. La API key vuelve únicamente al CLI de servidor y queda guardada en archivo privado con copia anterior.
+3. El operador emite un enlace de un solo uso, limitado a ese cliente y proveedor, que caduca en 10 minutos.
+4. El cliente revisa el nombre del cliente y la red y pulsa continuar.
+5. La pasarela llama a la API pública de Postiz con la clave interna de esa organización y valida el destino OAuth antes de entregar la navegación.
+6. El cliente inicia sesión directamente en la plataforma y acepta los permisos mostrados.
+7. Se comprueba que el canal recién conectado aparece solo en la organización esperada, y se registra proveedor, fecha y resultado sin guardar tokens de OAuth en logs.
+
+El provisionamiento está implementado como candidato de código en la rama. Frontend y backend compilaron en el entorno local; aún falta construir la imagen completa, desplegarla y configurarla en el Mac mini. Koolbrand opera Postiz; el cliente solo ve la pantalla de consentimiento de la red social. El endpoint de provisión es servidor a servidor, no una API de altas públicas.
 
 La aprobación de una app de plataforma y sus permisos no la sustituye Postiz. TikTok requiere aprobación de su propia app/scopes y políticas; una conexión OAuth exitosa no garantiza permiso para publicación pública.
 
@@ -41,7 +44,7 @@ La aprobación de una app de plataforma y sus permisos no la sustituye Postiz. T
 
 - La publicación Postiz v2.25.3 corrige dos avisos de seguridad comunicados por el proyecto; se debe reconstruir y revisar esta versión antes de desplegar. Producción y el candidato local necesitan verificación con La Puerta antes de confirmar sus hashes/versiones actuales.
 - La pasarela OAuth existe como candidato local, pero no está configurada ni desplegada; faltan Redis, dominio, configuración de tenants, API keys aisladas y una prueba por proveedor.
-- No encontramos una ruta de UI/API de privilegio mínimo para crear tenants con el registro cerrado. El código oficial incluye `POST /enterprise/create-user`, pero crea un usuario `SUPERADMIN` sintético y una organización `ULTIMATE` con cuota de un millón de canales mediante firma del secreto de sesión; no usarlo para clientes. El fork debe añadir una acción de aprovisionamiento protegida por `user.isSuperAdmin`, idempotente y transaccional: crear organización con límites self-host y vincular a un operador Koolbrand ya existente con rol `ADMIN`. Registrar quién, cliente, hora y resultado. La clave de organización debe llegar solo al servicio interno del Mac mini, guardarse en su almacén de secretos y no aparecer en la respuesta del navegador, logs ni auditoría. Añadir una política de alta/baja y límites por tenant. No hacer escrituras directas SQL.
+- El patch candidato añade un alta servidor-servidor con HMAC/nonce, ID externo único e idempotencia; limita las organizaciones gestionadas a PRO/30 canales y vincula al operador ya existente como `ADMIN`. El provisionador guarda la clave en archivo privado y registra solo identidad declarada, ID externo, organización y redes. El endpoint devuelve la clave al CLI del Mac mini: nunca debe exponerse al navegador ni copiarse a los logs. Frontend y backend compilaron; aún faltan imagen completa, revisión independiente, configuración y piloto. No hacer escrituras directas SQL.
 - TikTok y cualquier red pueden limitar scopes, tipos de cuenta, publicación directa, analytics o revisión de app. La matriz de capacidades debe reflejarlo por proveedor y cuenta.
 - Postiz no aparece en el inventario de apps desplegables de Coolify de La Puerta; por tanto, el despliegue no está habilitado por ese camino. No usar SSH como atajo: incorporar una capacidad autorizada en La Puerta o pedir al responsable de infraestructura que lo ejecute mediante el procedimiento documentado.
 

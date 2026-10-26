@@ -1,0 +1,220 @@
+diff --git a/apps/backend/src/api/routes/enterprise.controller.ts b/apps/backend/src/api/routes/enterprise.controller.ts
+index fef89ef..728b4b9 100644
+--- a/apps/backend/src/api/routes/enterprise.controller.ts
++++ b/apps/backend/src/api/routes/enterprise.controller.ts
+@@ -1 +1,2 @@
+-import { Body, Controller, Param, Post, Res } from '@nestjs/common';
++import { Body, Controller, Headers, HttpException, Param, Post, Res } from '@nestjs/common';
++import { createHmac, timingSafeEqual } from 'crypto';
+@@ -19,0 +21,71 @@ export class EnterpriseController {
++  @Post('/managed-tenants')
++  async createManagedTenant(
++    @Body() body: { externalId?: string; name?: string },
++    @Headers('x-kb-timestamp') timestamp: string,
++    @Headers('x-kb-nonce') nonce: string,
++    @Headers('x-kb-signature') signature: string
++  ) {
++    const secret = process.env.KOOLBRAND_TENANT_PROVISIONER_SECRET;
++    const operatorUserId = process.env.KOOLBRAND_POSTIZ_OPERATOR_USER_ID;
++    if (!secret || secret.length < 32 || !operatorUserId) {
++      throw new HttpException('Tenant provisioner is not configured', 503);
++    }
++    if (
++      typeof body?.externalId !== 'string' ||
++      !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(body.externalId) ||
++      typeof body?.name !== 'string' ||
++      body.name.trim().length < 3 ||
++      body.name.trim().length > 128 ||
++      !timestamp || !/^\d{10,13}$/.test(timestamp) ||
++      !nonce || !/^[a-f0-9]{32,64}$/.test(nonce) ||
++      !signature || !/^[a-f0-9]{64}$/.test(signature)
++    ) {
++      throw new HttpException('Invalid tenant provisioning request', 400);
++    }
++    const sentAt = Number(timestamp);
++    const sentAtMs = timestamp.length === 10 ? sentAt * 1000 : sentAt;
++    if (!Number.isSafeInteger(sentAtMs) || Math.abs(Date.now() - sentAtMs) > 60_000) {
++      throw new HttpException('Expired tenant provisioning request', 401);
++    }
++
++    const tenantName = body.name.trim();
++    const canonical = JSON.stringify([
++      'POST',
++      '/api/enterprise/managed-tenants',
++      timestamp,
++      nonce,
++      body.externalId,
++      tenantName,
++    ]);
++    const expected = createHmac('sha256', secret).update(canonical).digest();
++    const provided = Buffer.from(signature, 'hex');
++    if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
++      throw new HttpException('Invalid tenant provisioner signature', 401);
++    }
++
++    const claimed = await ioRedis.set(
++      `kb:tenant-provisioning:nonce:${nonce}`,
++      '1',
++      'EX',
++      120,
++      'NX'
++    );
++    if (claimed !== 'OK') {
++      throw new HttpException('Replayed tenant provisioning request', 409);
++    }
++
++    const tenant = await this._organizationService.createManagedOrganization(
++      body.externalId,
++      tenantName,
++      operatorUserId
++    );
++    // This is a server-to-server endpoint. The key is consumed by the Mac mini
++    // provisioner and must never be called from or exposed to a browser.
++    return {
++      externalId: body.externalId,
++      organizationId: tenant.id,
++      name: tenant.name,
++      apiKey: tenant.apiKey,
++    };
++  }
++
+diff --git a/apps/backend/src/api/routes/users.controller.ts b/apps/backend/src/api/routes/users.controller.ts
+index fccade5..d6c549b 100644
+--- a/apps/backend/src/api/routes/users.controller.ts
++++ b/apps/backend/src/api/routes/users.controller.ts
+@@ -98 +98,3 @@ export class UsersController {
+-      totalChannels: !process.env.STRIPE_PUBLISHABLE_KEY
++      totalChannels: organization?.managedExternalId
++        ? 30
++        : !process.env.STRIPE_PUBLISHABLE_KEY
+@@ -102,0 +105,3 @@ export class UsersController {
++        organization?.managedExternalId
++          ? 'PRO'
++          :
+@@ -119 +124 @@ export class UsersController {
+-        organization?.users[0]?.role === 'SUPERADMIN' ||
++        !organization?.managedExternalId &&
+@@ -121 +126,3 @@ export class UsersController {
+-        organization?.users[0]?.role === 'ADMIN'
++        (organization?.users[0]?.role === 'SUPERADMIN' ||
++        // @ts-ignore
++        organization?.users[0]?.role === 'ADMIN')
+@@ -247,0 +255,3 @@ export class UsersController {
++    if (organization?.managedExternalId) {
++      throw new HttpException('API keys for managed tenants are maintained by Koolbrand', 400);
++    }
+diff --git a/apps/backend/src/services/auth/auth.service.ts b/apps/backend/src/services/auth/auth.service.ts
+index 89706de..8ecf9ec 100644
+--- a/apps/backend/src/services/auth/auth.service.ts
++++ b/apps/backend/src/services/auth/auth.service.ts
+@@ -23,4 +23 @@ export class AuthService {
+-    if (
+-      process.env.DISABLE_REGISTRATION !== 'true' ||
+-      provider === Provider.GENERIC
+-    ) {
++    if (process.env.DISABLE_REGISTRATION !== 'true') {
+@@ -29,0 +27,7 @@ export class AuthService {
++    // Generic/OIDC is a login provider, not a permanent exemption from a
++    // closed self-hosted registration policy. Preserve the first-user
++    // bootstrap behavior, then reject new OIDC identities after org creation.
++    if (provider === Provider.GENERIC) {
++      return (await this._organizationService.getCount()) === 0;
++    }
++
+diff --git a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
+index f70f71c..468a2a7 100644
+--- a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
++++ b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.repository.ts
+@@ -16,0 +17,69 @@ export class OrganizationRepository {
++  async createManagedOrganization(
++    externalId: string,
++    name: string,
++    operatorUserId: string
++  ) {
++    const operator = await this._user.model.user.findUnique({
++      where: { id: operatorUserId },
++      select: { id: true, isSuperAdmin: true, deletedAt: true },
++    });
++    if (!operator?.isSuperAdmin || operator.deletedAt) {
++      throw new Error('Configured Postiz tenant operator is not an active superadmin');
++    }
++
++    const existing = await this._organization.model.organization.findUnique({
++      where: { managedExternalId: externalId },
++      select: { id: true, name: true, apiKey: true },
++    });
++    if (existing) {
++      if (existing.name !== name) {
++        throw new Error('Managed external ID already belongs to a different organization name');
++      }
++      return existing;
++    }
++
++    try {
++      return await this._organization.model.organization.create({
++        select: { id: true, name: true, apiKey: true },
++        data: {
++          name,
++          managedExternalId: externalId,
++          apiKey: AuthService.fixedEncryption(makeSecureId(32)),
++          allowTrial: false,
++          isTrailing: false,
++          subscription: {
++            create: {
++              subscriptionTier: SubscriptionTier.PRO,
++              totalChannels: 30,
++              isLifetime: true,
++              period: 'YEARLY',
++              provider: 'self-hosted',
++            },
++          },
++          users: {
++            create: {
++              role: Role.ADMIN,
++              user: { connect: { id: operator.id } },
++            },
++          },
++        },
++      });
++    } catch (error: any) {
++      // A retry after a lost response, or concurrent requests with the same
++      // external ID, must return the one organization already created.
++      if (error?.code === 'P2002') {
++        const created = await this._organization.model.organization.findUnique({
++          where: { managedExternalId: externalId },
++          select: { id: true, name: true, apiKey: true },
++        });
++        if (created) {
++          if (created.name !== name) {
++            throw new Error('Managed external ID already belongs to a different organization name');
++          }
++          return created;
++        }
++      }
++      throw error;
++    }
++  }
++
+diff --git a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
+index b14f5db..62919fb 100644
+--- a/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
++++ b/libraries/nestjs-libraries/src/database/prisma/organizations/organization.service.ts
+@@ -32,0 +33,12 @@ export class OrganizationService {
++  createManagedOrganization(
++    externalId: string,
++    name: string,
++    operatorUserId: string
++  ) {
++    return this._organizationRepository.createManagedOrganization(
++      externalId,
++      name,
++      operatorUserId
++    );
++  }
++
+diff --git a/libraries/nestjs-libraries/src/database/prisma/schema.prisma b/libraries/nestjs-libraries/src/database/prisma/schema.prisma
+index 2fd85ec..ba9f536 100644
+--- a/libraries/nestjs-libraries/src/database/prisma/schema.prisma
++++ b/libraries/nestjs-libraries/src/database/prisma/schema.prisma
+@@ -13,0 +14 @@ model Organization {
++  managedExternalId   String?              @unique

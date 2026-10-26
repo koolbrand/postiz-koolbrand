@@ -30,7 +30,6 @@ if (publicBase.username || publicBase.password || publicBase.search || publicBas
 }
 if (publicBase.pathname !== '/') throw new Error('PUBLIC_BASE_URL must be an origin without a path');
 
-const tenants = JSON.parse(await readFile(tenantsFile, 'utf8'));
 const redis = createClient({ url: redisUrl });
 redis.on('error', () => console.error('redis connection error'));
 await redis.connect();
@@ -85,7 +84,10 @@ function readJson(req, maxBytes = 2048) {
   });
 }
 
-function resolveTenant(slug) {
+async function resolveTenant(slug) {
+  let tenants;
+  try { tenants = JSON.parse(await readFile(tenantsFile, 'utf8')); }
+  catch { return null; }
   const tenant = tenants[slug];
   if (!tenant || typeof tenant.name !== 'string' || !tenant.name ||
       typeof tenant.apiKey !== 'string' || !tenant.apiKey ||
@@ -133,7 +135,7 @@ async function handle(req, res) {
     } else {
       record = await linkRecord(token);
     }
-    const tenant = record && resolveTenant(record.tenant);
+    const tenant = record && await resolveTenant(record.tenant);
     const hosts = tenant && resolveProvider(tenant, record.provider);
     if (!record || !tenant || !hosts) return reply(res, 410, { error: 'Enlace no válido o caducado.' });
     if (url.pathname.endsWith('/preview')) {
