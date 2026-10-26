@@ -7,7 +7,7 @@
 - Una organización Postiz por cliente; canales, calendario, medios, miembros y analítica quedan dentro de esa organización.
 - Personal interno de Koolbrand es miembro de las organizaciones que gestiona, con el rol mínimo que permita el trabajo.
 - Una API key distinta por organización. La clave vive en el servidor de la pasarela, con acceso restringido; nunca en el navegador, enlaces, tickets o repositorio.
-- Bella y Koolbrand ya tienen organizaciones separadas. Los canales de Northkin están conectados hoy dentro de la organización Koolbrand: no borrarlos ni recrearlos hasta tener respaldo de publicaciones y un procedimiento de migración validado.
+- Bella, Koolbrand y Northkin aparecen en organizaciones separadas en la lectura en vivo de canales del 26-oct. La asignación visible no demuestra aislamiento de medios, publicaciones, métricas ni miembros; falta comprobar esos límites con usuarios de prueba.
 - Cada autorización social la completa el titular en el dominio oficial de la plataforma. Koolbrand nunca solicita su contraseña ni código 2FA.
 
 ## Flujo de conexión
@@ -41,7 +41,7 @@ La aprobación de una app de plataforma y sus permisos no la sustituye Postiz. T
 
 - La publicación Postiz v2.25.3 corrige dos avisos de seguridad comunicados por el proyecto; se debe reconstruir y revisar esta versión antes de desplegar. Producción y el candidato local necesitan verificación con La Puerta antes de confirmar sus hashes/versiones actuales.
 - La pasarela OAuth existe como candidato local, pero no está configurada ni desplegada; faltan Redis, dominio, configuración de tenants, API keys aisladas y una prueba por proveedor.
-- No encontramos una ruta administrativa oficial de Postiz para crear tenants vía API pública. El flujo de aprovisionamiento debe apoyarse en UI/servicios oficiales o en un fork revisable; no hacer escrituras directas SQL.
+- No encontramos una ruta administrativa pública de privilegio mínimo para crear tenants. El código oficial incluye `POST /enterprise/create-user`, pero crea un usuario `SUPERADMIN` sintético y una organización `ULTIMATE` con cuota de un millón de canales mediante un JWT firmado con `JWT_SECRET`; no usarlo como aprovisionamiento de clientes. Implementar un endpoint interno específico de Koolbrand con autorización de operador, idempotencia, rol mínimo, límites de canales y auditoría, y someterlo a revisión antes de staging. No hacer escrituras directas SQL.
 - TikTok y cualquier red pueden limitar scopes, tipos de cuenta, publicación directa, analytics o revisión de app. La matriz de capacidades debe reflejarlo por proveedor y cuenta.
 - Postiz no aparece en el inventario de apps desplegables de Coolify de La Puerta; por tanto, el despliegue no está habilitado por ese camino. No usar SSH como atajo: incorporar una capacidad autorizada en La Puerta o pedir al responsable de infraestructura que lo ejecute mediante el procedimiento documentado.
 
