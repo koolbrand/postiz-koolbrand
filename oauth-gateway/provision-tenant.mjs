@@ -1,13 +1,13 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { access, appendFile, chmod, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 
 const [externalId, ...rest] = process.argv.slice(2);
-const actorIndex = rest.indexOf('--actor');
-const actor = actorIndex >= 0 ? rest[actorIndex + 1] : '';
-const name = rest.filter((_, index) => index !== actorIndex && index !== actorIndex + 1).join(' ').trim();
+const name = rest.join(' ').trim();
+const operator = userInfo().username;
+const operatorUid = typeof process.getuid === 'function' ? process.getuid() : null;
 const providerList = (process.env.POSTIZ_TENANT_PROVIDERS || '').split(',').map(x => x.trim()).filter(Boolean);
 const oauthHosts = {
   facebook: ['www.facebook.com'],
@@ -27,9 +27,10 @@ const oauthHosts = {
 
 if (!externalId || !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(externalId) ||
     name.length < 3 || name.length > 128 ||
-    actorIndex < 0 || !/^[^\s@]+@koolbrand\.com$/i.test(actor) ||
+    !operator || !Number.isInteger(operatorUid) || operatorUid < 1 ||
+    (typeof process.geteuid === 'function' && process.geteuid() !== operatorUid) ||
     providerList.some(provider => !Object.hasOwn(oauthHosts, provider))) {
-  console.error('Uso: POSTIZ_TENANT_PROVIDERS=<lista> node provision-tenant.mjs <id-cliente> <nombre> --actor <email-koolbrand>');
+  console.error('Uso: POSTIZ_TENANT_PROVIDERS=<lista> node provision-tenant.mjs <id-cliente> <nombre> (ejecutar como usuario local no-root, sin cambiar UID)');
   process.exit(2);
 }
 
@@ -115,7 +116,8 @@ await rename(temporary, tenantsFile);
 await mkdir(dirname(auditFile), { recursive: true, mode: 0o700 });
 await appendFile(auditFile, `${JSON.stringify({
   event: 'tenant_provisioned',
-  actorDeclared: actor,
+  operatorSystemUser: operator,
+  operatorUid,
   externalId,
   organizationId: provisioned.organizationId,
   providers,
