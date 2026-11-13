@@ -32,6 +32,8 @@ RUN git apply --unidiff-zero --check /tmp/postiz-koolbrand.patch \
 COPY marca/ /kb-marca/
 RUN cp /app/var/docker/nginx.conf /etc/nginx/nginx.conf \
     && sed -i 's/^user[[:space:]]\+www;/user www-data;/' /etc/nginx/nginx.conf
+# Los vídeos subidos no cargaban al abrirlos en una pestaña: ver marca/uploads-video.sh.
+RUN sh /kb-marca/uploads-video.sh
 RUN sh /kb-marca/idioma-es.sh
 # El postinstall genera Prisma Client; ejecutarlo después del patch para incluir su schema.
 RUN pnpm install --prefer-offline
